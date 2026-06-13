@@ -17,13 +17,29 @@ bash "$ROOT/install.sh"
 
 HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" zsh -f -c '
   source "$HOME/.cvm/cvm.sh"
-  [[ "$(cvm version)" == "cvm v1.4.0" ]]
+  [[ "$(cvm version)" == "cvm v1.5.0" ]]
   for command_name in \
-    cvm claude-v claude-l-a claude-v-a claude-l-l claude-v-l \
-    claude-l-r claude-v-r codex-v codex-l-a codex-v-a codex-l-l \
-    codex-v-l codex-l-r codex-v-r; do
+    cvm claude-auto claude-v claude-l-a claude-v-a claude-l-l claude-v-l \
+    claude-l-r claude-v-r claude-install claude-current claude-uninstall \
+    claude-remove codex-auto codex-v codex-l-a codex-v-a codex-l-l \
+    codex-v-l codex-l-r codex-v-r codex-install codex-current \
+    codex-uninstall codex-remove; do
     whence -w "$command_name" >/dev/null
   done
+
+  functions command_not_found_handler | grep -q "claude-auto-"
+  functions command_not_found_handler | grep -q "codex-auto-"
+
+  cvm_install() { [[ "$1" == "2.1.177" ]]; }
+  cvm_uninstall() { [[ "$1" == "2.1.177" ]]; }
+  _cvm_codex_install_version() { [[ "$1" == "0.139.0" ]]; }
+  _cvm_codex_uninstall() { [[ "$1" == "0.139.0" ]]; }
+  claude-install 2.1.177
+  claude-uninstall 2.1.177
+  claude-remove 2.1.177
+  codex-install 0.139.0
+  codex-uninstall 0.139.0
+  codex-remove 0.139.0
 '
 
 grep -q '# >>> cvm >>>' "$TEMP_HOME/.zshrc"

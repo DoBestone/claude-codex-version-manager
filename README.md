@@ -39,6 +39,12 @@ claude-v 2.1.177      # 同上
 claude-l-a            # 本地可用版本
 claude-l-l            # 版本及发布时间
 claude-l-r 2.1.177    # 卸载指定版本
+claude-install 2.1.177 # 只安装指定版本
+claude-current        # 当前系统版本
+claude-uninstall 2.1.177
+claude-remove 2.1.177 # uninstall 的别名
+claude-auto           # 当前版本免权限确认运行
+claude-auto-2.1.177   # 指定版本免权限确认运行
 claude-latest         # 临时运行 npm 最新版
 claude-versions       # npm 全部版本
 claude-update         # 更新全局 Claude Code
@@ -54,6 +60,12 @@ codex-v 0.139.0       # 同上
 codex-l-a             # 本地可用版本
 codex-l-l             # 版本及发布时间
 codex-l-r 0.139.0     # 卸载 CVM 副本和 npx 缓存
+codex-install 0.139.0 # 只安装指定版本
+codex-current         # 当前系统版本
+codex-uninstall 0.139.0
+codex-remove 0.139.0  # uninstall 的别名
+codex-auto            # 当前版本跳过审批与沙箱运行
+codex-auto-0.139.0    # 指定版本跳过审批与沙箱运行
 codex-latest          # 临时运行 npm 最新版
 codex-versions        # npm 全部版本
 codex-update          # 按当前来源使用 Homebrew 或 npm 更新
@@ -63,6 +75,10 @@ codex-update          # 按当前来源使用 Homebrew 或 npm 更新
 
 Codex 的卸载不会删除 Homebrew 系统安装，只清理 CVM 副本与匹配的 npx
 缓存。
+
+`claude-auto*` 和 `codex-auto*` 会关闭对应 CLI 的安全确认，仅应在可信目录
+和明确了解命令影响时使用。Codex 原生命令继续直接使用，例如
+`codex exec`、`codex review`、`codex resume`、`codex mcp` 和 `codex plugin`。
 
 ## CVM 子命令
 

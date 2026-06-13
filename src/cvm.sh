@@ -4,7 +4,7 @@
 # A lightweight macOS version manager for Claude Code and OpenAI Codex CLI
 # ============================================================================
 
-CVM_VERSION="1.4.0"
+CVM_VERSION="1.5.0"
 CVM_DIR="${CVM_DIR:-$HOME/.cvm}"
 CVM_REPO="${CVM_REPO:-DoBestone/claude-codex-version-manager}"
 CVM_PINS_FILE="$CVM_DIR/pins"
@@ -646,15 +646,25 @@ ${BOLD}快捷指令${NC}
   ${CYAN}claude-v-l${NC}                  列出全部版本及发布时间
   ${CYAN}claude-v-r <版本>${NC}           卸载指定版本
   ${CYAN}claude-auto${NC}                 当前全局版本免权限确认运行
+  ${CYAN}claude-install <版本>${NC}       安装指定 Claude Code 版本
+  ${CYAN}claude-current${NC}              显示当前系统 Claude Code 版本
+  ${CYAN}claude-uninstall <版本>${NC}     卸载指定 Claude Code 版本
+  ${CYAN}claude-remove <版本>${NC}        等同 claude-uninstall
   ${CYAN}claude-latest${NC}               临时运行 npm 最新版本
   ${CYAN}claude-versions${NC}             查看 npm 全部可用版本
   ${CYAN}claude-clean${NC}                清理 npm/npx 缓存
   ${CYAN}claude-update${NC}               更新系统全局 Claude Code
   ${CYAN}codex-<版本>${NC}                自动安装并运行指定 Codex 版本
+  ${CYAN}codex-auto-<版本>${NC}           指定版本跳过审批与沙箱运行
   ${CYAN}codex-v <版本>${NC}              等同 cvm codex use <版本>
   ${CYAN}codex-l-a | codex-v-a${NC}       列出 Codex 本地可用版本
   ${CYAN}codex-v-l${NC}                   列出 Codex 全部版本及发布时间
   ${CYAN}codex-v-r <版本>${NC}            卸载指定 Codex 版本
+  ${CYAN}codex-auto${NC}                  当前全局版本跳过审批与沙箱运行
+  ${CYAN}codex-install <版本>${NC}        安装指定 Codex 版本
+  ${CYAN}codex-current${NC}               显示当前系统 Codex 版本
+  ${CYAN}codex-uninstall <版本>${NC}      卸载指定 Codex 版本
+  ${CYAN}codex-remove <版本>${NC}         等同 codex-uninstall
 
 ${BOLD}常用示例${NC}
   cvm use 2.1.90            # 临时使用 2.1.90 版本
@@ -1294,6 +1304,22 @@ claude-update() {
   cvm_update
 }
 
+claude-install() {
+  cvm_install "$@"
+}
+
+claude-current() {
+  cvm_current "$@"
+}
+
+claude-uninstall() {
+  cvm_uninstall "$@"
+}
+
+claude-remove() {
+  cvm_uninstall "$@"
+}
+
 # List all Claude Code versions and their publication times.
 claude-v-l() {
   cvm_releases "$@"
@@ -1322,6 +1348,10 @@ claude-l-r() {
 }
 
 # Codex version shortcuts.
+codex-auto() {
+  codex --dangerously-bypass-approvals-and-sandbox "$@"
+}
+
 codex-v() {
   if [[ -z "$1" ]]; then
     codex --version
@@ -1377,8 +1407,23 @@ codex-update() {
   codex --version
 }
 
-# Run any Claude Code version via commands such as `claude-2.1.158` and
-# `claude-auto-2.1.170`.
+codex-install() {
+  _cvm_codex_install_version "$@"
+}
+
+codex-current() {
+  codex --version "$@"
+}
+
+codex-uninstall() {
+  _cvm_codex_uninstall "$@"
+}
+
+codex-remove() {
+  _cvm_codex_uninstall "$@"
+}
+
+# Run any Claude Code or Codex version via versioned commands.
 if [[ -n "$ZSH_VERSION" ]]; then
   if (( $+functions[command_not_found_handler] )); then
     functions[_cvm_previous_command_not_found_handler]=$functions[command_not_found_handler]
@@ -1400,6 +1445,11 @@ if [[ -n "$ZSH_VERSION" ]]; then
 
     if [[ "$command_name" =~ '^codex-([0-9]+\.[0-9]+\.[0-9]+)$' ]]; then
       _cvm_codex_use "${match[1]}" "$@"
+      return $?
+    fi
+
+    if [[ "$command_name" =~ '^codex-auto-([0-9]+\.[0-9]+\.[0-9]+)$' ]]; then
+      _cvm_codex_use "${match[1]}" --dangerously-bypass-approvals-and-sandbox "$@"
       return $?
     fi
 
