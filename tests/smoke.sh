@@ -42,6 +42,9 @@ bash "$ROOT/uninstall.sh"
 
 [[ ! -f "$TEMP_HOME/.cvm/cvm.sh" ]]
 [[ -d "$TEMP_HOME/.cvm" ]]
-! grep -q '# >>> cvm >>>' "$TEMP_HOME/.zshrc"
+if grep -q '# >>> cvm >>>' "$TEMP_HOME/.zshrc"; then
+  printf '卸载后仍残留 shell 初始化配置。\n' >&2
+  exit 1
+fi
 
 printf 'Smoke tests passed.\n'
