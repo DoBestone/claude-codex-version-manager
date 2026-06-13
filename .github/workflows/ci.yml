@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: brew install shellcheck
+      - name: Shellcheck
+        run: shellcheck install.sh uninstall.sh tests/smoke.sh
+      - name: Smoke test
+        run: bash tests/smoke.sh
