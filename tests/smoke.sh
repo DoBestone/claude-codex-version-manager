@@ -26,6 +26,12 @@ printf '%s\n' '{"OPENAI_API_KEY":"codex-json-secret","account":{"email":"user@ex
 
 HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   set -e
+  contains() {
+    case "$1" in
+      *"$2"*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
   source "$HOME/.cvm/cvm.sh"
   [[ "$(cvm version)" == "cvm v1.5.0" ]]
   for command_name in \
@@ -39,18 +45,18 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
 
   cvm config claude >/dev/null
   cvm config codex >/dev/null
-  cvm help | grep -q "用法"
+  contains "$(cvm help)" "用法"
   printf "0\n" | cvm >/dev/null
   claude_config="$(cvm config claude)"
   codex_config="$(cvm config codex)"
-  printf "%s" "$claude_config" | grep -q "API URL ANTHROPIC_BASE_URL"
-  printf "%s" "$codex_config" | grep -q "API URL OPENAI_BASE_URL"
+  contains "$claude_config" "API URL ANTHROPIC_BASE_URL"
+  contains "$codex_config" "API URL OPENAI_BASE_URL"
   claude_env_config="$(ANTHROPIC_BASE_URL="https://anthropic.example/v1" ANTHROPIC_API_KEY="sk-ant-test" cvm config claude)"
   codex_env_config="$(OPENAI_BASE_URL="https://openai.example/v1" cvm config codex)"
-  printf "%s" "$claude_env_config" | grep -q "https://anthropic.example/v1"
-  printf "%s" "$codex_env_config" | grep -q "https://openai.example/v1"
-  printf "%s" "$claude_env_config" | grep -q "API Key ANTHROPIC_API_KEY: string(len=11) <redacted>"
-  ANTHROPIC_API_KEY="sk-ant-test" cvm config claude --show-secrets | grep -q "API Key ANTHROPIC_API_KEY: sk-ant-test"
+  contains "$claude_env_config" "https://anthropic.example/v1"
+  contains "$codex_env_config" "https://openai.example/v1"
+  contains "$claude_env_config" "API Key ANTHROPIC_API_KEY: string(len=11) <redacted>"
+  contains "$(ANTHROPIC_API_KEY="sk-ant-test" cvm config claude --show-secrets)" "API Key ANTHROPIC_API_KEY: sk-ant-test"
   cvm config set claude api-url "https://managed-anthropic.example/v1" >/dev/null
   [[ "$ANTHROPIC_BASE_URL" == "https://managed-anthropic.example/v1" ]]
   grep -q "ANTHROPIC_BASE_URL=.*https://managed-anthropic.example/v1" "$HOME/.cvm/env"
@@ -61,15 +67,16 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
     exit 1
   fi
   cvm profile add claude work "https://profile-anthropic.example/v1" "sk-profile" "claude-profile-model" "socks5://127.0.0.1:7890" >/dev/null
-  cvm profile list claude | grep -q "work"
-  cvm profile list claude | grep -q "1)"
+  profile_list="$(cvm profile list claude)"
+  contains "$profile_list" "work"
+  contains "$profile_list" "1)"
   cvm profile use claude work >/dev/null
   [[ "$ANTHROPIC_BASE_URL" == "https://profile-anthropic.example/v1" ]]
   [[ "$ANTHROPIC_API_KEY" == "sk-profile" ]]
   [[ "$ANTHROPIC_MODEL" == "claude-profile-model" ]]
   [[ "$HTTPS_PROXY" == "socks5://127.0.0.1:7890" ]]
   cvm profile delete claude work >/dev/null
-  if cvm profile list claude | grep -q "work"; then
+  if contains "$(cvm profile list claude)" "work"; then
     exit 1
   fi
   printf "2\n2\nmenu-codex\nhttps://menu-openai.example/v1\nsk-menu\ngpt-menu-test\nhttp://127.0.0.1:7890\n5\n1\n0\n0\n" | cvm menu >/dev/null 2>&1
@@ -79,22 +86,22 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   [[ "$OPENAI_BASE_URL" == "https://menu-openai.example/v1" ]]
   [[ "$OPENAI_API_KEY" == "sk-menu" ]]
   [[ "$HTTPS_PROXY" == "http://127.0.0.1:7890" ]]
-  printf "%s" "$claude_config" | grep -q "apiKey: string(len=14) <redacted>"
-  printf "%s" "$claude_config" | grep -q "oauth.accessToken: string(len=12) <redacted>"
-  printf "%s" "$claude_config" | grep -q "model: claude-test-model"
-  if printf "%s" "$claude_config" | grep -q "lastSessionFirstPrompt"; then
+  contains "$claude_config" "apiKey: string(len=14) <redacted>"
+  contains "$claude_config" "oauth.accessToken: string(len=12) <redacted>"
+  contains "$claude_config" "model: claude-test-model"
+  if contains "$claude_config" "lastSessionFirstPrompt"; then
     exit 1
   fi
-  printf "%s" "$codex_config" | grep -q "api_key = <redacted>"
-  printf "%s" "$codex_config" | grep -q "OPENAI_API_KEY: string(len=17) <redacted>"
-  if printf "%s" "$claude_config" | grep -q "sk-test-secret"; then
+  contains "$codex_config" "api_key = <redacted>"
+  contains "$codex_config" "OPENAI_API_KEY: string(len=17) <redacted>"
+  if contains "$claude_config" "sk-test-secret"; then
     exit 1
   fi
-  if printf "%s" "$codex_config" | grep -q "codex-json-secret"; then
+  if contains "$codex_config" "codex-json-secret"; then
     exit 1
   fi
-  cvm config claude --show-secrets | grep -q "sk-test-secret"
-  cvm config codex --show-secrets | grep -q "codex-json-secret"
+  contains "$(cvm config claude --show-secrets)" "sk-test-secret"
+  contains "$(cvm config codex --show-secrets)" "codex-json-secret"
   cvm detect claude >/dev/null
   cvm detect codex >/dev/null
 
@@ -134,6 +141,12 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
 
 if command -v zsh >/dev/null 2>&1; then
   HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" zsh -f -c '
+  contains() {
+    case "$1" in
+      *"$2"*) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
   source "$HOME/.cvm/cvm.sh"
   [[ "$(cvm version)" == "cvm v1.5.0" ]]
   for command_name in \
@@ -145,8 +158,8 @@ if command -v zsh >/dev/null 2>&1; then
     whence -w "$command_name" >/dev/null
   done
 
-  functions command_not_found_handler | grep -q "claude-auto-"
-  functions command_not_found_handler | grep -q "codex-auto-"
+  contains "$(functions command_not_found_handler)" "claude-auto-"
+  contains "$(functions command_not_found_handler)" "codex-auto-"
 
   cvm_install() { [[ "$1" == "2.1.177" ]]; }
   cvm_uninstall() { [[ "$1" == "2.1.177" ]]; }
