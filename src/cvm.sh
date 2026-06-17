@@ -1019,15 +1019,27 @@ _cvm_config_clear() {
   _cvm_config_clear_var "$var_name"
 }
 
+# Emit the override variables for a target, one per line. Using printf with
+# literal arguments keeps this identical under bash and zsh (zsh does not
+# word-split unquoted scalars, so `for x in $list` would not work here).
 _cvm_reset_var_list() {
-  local target="$1"
-  local claude_vars="ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX"
-  local codex_vars="OPENAI_BASE_URL OPENAI_API_KEY OPENAI_MODEL OPENAI_ORG_ID OPENAI_PROJECT_ID"
-  local proxy_vars="HTTPS_PROXY HTTP_PROXY"
-  case "$target" in
-    claude) printf '%s\n' "$claude_vars" ;;
-    codex)  printf '%s\n' "$codex_vars" ;;
-    all)    printf '%s\n' "$claude_vars $codex_vars $proxy_vars" ;;
+  case "$1" in
+    claude|all)
+      printf '%s\n' \
+        ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL \
+        ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
+        CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX
+      ;;
+  esac
+  case "$1" in
+    codex|all)
+      printf '%s\n' OPENAI_BASE_URL OPENAI_API_KEY OPENAI_MODEL OPENAI_ORG_ID OPENAI_PROJECT_ID
+      ;;
+  esac
+  case "$1" in
+    all)
+      printf '%s\n' HTTPS_PROXY HTTP_PROXY
+      ;;
   esac
 }
 
@@ -1037,7 +1049,7 @@ _cvm_reset_var_list() {
 # `/logout` + re-login actually take effect.
 _cvm_reset() {
   local target="${1:-all}"
-  local var cleared=0 vars rc found_rc="" pattern="" tmp
+  local var cleared=0 rc found_rc="" pattern="" tmp
 
   case "$target" in
     claude|codex|all) ;;
@@ -1047,14 +1059,14 @@ _cvm_reset() {
       ;;
   esac
 
-  vars="$(_cvm_reset_var_list "$target")"
-  for var in $vars; do
+  while IFS= read -r var; do
+    [[ -n "$var" ]] || continue
     if [[ -n "$(_cvm_var_value "$var")" ]] || { [[ -f "$CVM_ENV_FILE" ]] && grep -q "^export ${var}=" "$CVM_ENV_FILE"; }; then
       cleared=$((cleared + 1))
     fi
     unset "$var" 2>/dev/null || true
     if [[ -n "$pattern" ]]; then pattern="${pattern}|${var}"; else pattern="$var"; fi
-  done
+  done < <(_cvm_reset_var_list "$target")
 
   # Scrub every target var from the env file in a single pass so the result is
   # deterministic regardless of what is still exported in this shell.

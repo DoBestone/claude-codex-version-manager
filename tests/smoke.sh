@@ -195,6 +195,15 @@ if command -v zsh >/dev/null 2>&1; then
   codex-install 0.139.0
   codex-uninstall 0.139.0
   codex-remove 0.139.0
+
+  # reset must work under zsh, where unquoted scalars are not word-split
+  cvm config set claude opus-model "deepseek-v4-pro" >/dev/null
+  [[ "$ANTHROPIC_DEFAULT_OPUS_MODEL" == "deepseek-v4-pro" ]]
+  cvm reset claude >/dev/null
+  [[ -z "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]]
+  if grep -q "^export ANTHROPIC_DEFAULT_OPUS_MODEL=" "$HOME/.cvm/env"; then
+    exit 1
+  fi
 '
 fi
 
