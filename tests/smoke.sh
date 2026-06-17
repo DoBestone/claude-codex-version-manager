@@ -27,6 +27,7 @@ printf '%s\n' '{"OPENAI_API_KEY":"codex-json-secret","account":{"email":"user@ex
 
 HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   set -e
+  trap '\''printf "Inner bash smoke failed at line %s.\n" "$LINENO" >&2'\'' ERR
   contains() {
     case "$1" in
       *"$2"*) return 0 ;;
