@@ -1014,9 +1014,9 @@ _cvm_prompt_value() {
   local value
 
   if [[ -n "$current" ]]; then
-    printf '%b' "${label} ${DIM}(当前: ${current})${NC}: "
+    printf '%b' "${label} ${DIM}(当前: ${current})${NC}: " >&2
   else
-    printf '%b' "${label}: "
+    printf '%b' "${label}: " >&2
   fi
   IFS= read -r value
   if [[ -z "$value" ]]; then
