@@ -18,6 +18,11 @@ CVM_SHELL_RC="$TEMP_HOME/.bashrc" \
 CVM_TEST_UNAME=Linux \
 bash "$ROOT/install.sh"
 
+mkdir -p "$TEMP_HOME/.claude" "$TEMP_HOME/.codex"
+printf '%s\n' '{"apiKey":"sk-test-secret","oauth":{"accessToken":"oauth-secret"},"account":{"email":"user@example.com"}}' > "$TEMP_HOME/.claude/settings.json"
+printf '%s\n' 'api_key = "codex-secret"' > "$TEMP_HOME/.codex/config.toml"
+printf '%s\n' '{"OPENAI_API_KEY":"codex-json-secret","account":{"email":"user@example.com"}}' > "$TEMP_HOME/.codex/auth.json"
+
 HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   set -e
   source "$HOME/.cvm/cvm.sh"
@@ -33,6 +38,18 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
 
   cvm config claude >/dev/null
   cvm config codex >/dev/null
+  cvm config claude | grep -q "apiKey: string(len=14) <redacted>"
+  cvm config claude | grep -q "oauth.accessToken: string(len=12) <redacted>"
+  cvm config codex | grep -q "api_key = <redacted>"
+  cvm config codex | grep -q "OPENAI_API_KEY: string(len=17) <redacted>"
+  if cvm config claude | grep -q "sk-test-secret"; then
+    exit 1
+  fi
+  if cvm config codex | grep -q "codex-json-secret"; then
+    exit 1
+  fi
+  cvm config claude --show-secrets | grep -q "sk-test-secret"
+  cvm config codex --show-secrets | grep -q "codex-json-secret"
   cvm detect claude >/dev/null
   cvm detect codex >/dev/null
 

@@ -620,15 +620,17 @@ JS
 
 _cvm_json_config_summary() {
   local file="$1"
+  local show_secrets="${2:-false}"
   [[ -f "$file" ]] || return 0
 
-  node - "$file" <<'JS'
+  node - "$file" "$show_secrets" <<'JS'
 const fs = require("fs");
 const file = process.argv[2];
+const showSecrets = process.argv[3] === "true";
 const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
 
 function summarize(value, depth = 0, key = "") {
-  if (sensitive.test(key)) return "<redacted>";
+  if (!showSecrets && sensitive.test(key)) return "<redacted>";
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return `[array:${value.length}]`;
   if (depth >= 2) return `[object:${Object.keys(value).length} keys]`;
@@ -648,13 +650,62 @@ try {
 JS
 }
 
-_cvm_text_config_summary() {
+_cvm_json_auth_summary() {
   local file="$1"
+  local show_secrets="${2:-false}"
   [[ -f "$file" ]] || return 0
 
-  node - "$file" <<'JS'
+  node - "$file" "$show_secrets" <<'JS'
 const fs = require("fs");
 const file = process.argv[2];
+const showSecrets = process.argv[3] === "true";
+const interesting = /(api|token|secret|key|password|passwd|auth|oauth|cookie|session|credential|login|account|email|org|organization)/i;
+const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
+const rows = [];
+
+function describe(value, key) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return `array(${value.length})`;
+  if (typeof value === "object") return `object(${Object.keys(value).length} keys)`;
+  if (!showSecrets && sensitive.test(key)) return `${typeof value}(len=${String(value).length}) <redacted>`;
+  if (typeof value === "string") return value.length > 80 ? `${value.slice(0, 77)}...` : value;
+  return String(value);
+}
+
+function walk(value, path = []) {
+  if (path.length && interesting.test(path.join("."))) {
+    rows.push([path.join("."), describe(value, path.at(-1) || "")]);
+  }
+  if (!value || typeof value !== "object" || path.length >= 6) return;
+  for (const [key, child] of Object.entries(value)) walk(child, path.concat(key));
+}
+
+try {
+  walk(JSON.parse(fs.readFileSync(file, "utf8")));
+  if (rows.length) {
+    console.log("      认证/API 线索:");
+    for (const [path, value] of rows.slice(0, 80)) {
+      console.log(`        ${path}: ${value}`);
+    }
+    if (rows.length > 80) console.log(`        ... 另有 ${rows.length - 80} 项`);
+  } else {
+    console.log("      认证/API 线索: 未发现");
+  }
+} catch (error) {
+  console.log(`      认证/API 线索解析失败: ${error.message}`);
+}
+JS
+}
+
+_cvm_text_config_summary() {
+  local file="$1"
+  local show_secrets="${2:-false}"
+  [[ -f "$file" ]] || return 0
+
+  node - "$file" "$show_secrets" <<'JS'
+const fs = require("fs");
+const file = process.argv[2];
+const showSecrets = process.argv[3] === "true";
 const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
 const lines = fs.readFileSync(file, "utf8")
   .split(/\r?\n/)
@@ -663,7 +714,7 @@ const lines = fs.readFileSync(file, "utf8")
   .slice(0, 80)
   .map(line => {
     const key = line.split("=")[0] || "";
-    if (sensitive.test(key)) return line.replace(/=.*/, "= <redacted>");
+    if (!showSecrets && sensitive.test(key)) return line.replace(/=.*/, "= <redacted>");
     return line.length > 160 ? `${line.slice(0, 157)}...` : line;
   });
 
@@ -671,6 +722,37 @@ if (lines.length) {
   console.log(lines.map(line => `      ${line}`).join("\n"));
 } else {
   console.log("      (无可显示配置项)");
+}
+JS
+}
+
+_cvm_text_auth_summary() {
+  local file="$1"
+  local show_secrets="${2:-false}"
+  [[ -f "$file" ]] || return 0
+
+  node - "$file" "$show_secrets" <<'JS'
+const fs = require("fs");
+const file = process.argv[2];
+const showSecrets = process.argv[3] === "true";
+const interesting = /(api|token|secret|key|password|passwd|auth|oauth|cookie|session|credential|login|account|email|org|organization)/i;
+const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
+const rows = fs.readFileSync(file, "utf8")
+  .split(/\r?\n/)
+  .map(line => line.trim())
+  .filter(line => line && !line.startsWith("#") && interesting.test(line))
+  .slice(0, 80)
+  .map(line => {
+    const key = line.split("=")[0].trim();
+    if (!showSecrets && sensitive.test(key)) return line.replace(/=.*/, "= <redacted>");
+    return line.length > 160 ? `${line.slice(0, 157)}...` : line;
+  });
+
+if (rows.length) {
+  console.log("      认证/API 线索:");
+  console.log(rows.map(line => `        ${line}`).join("\n"));
+} else {
+  console.log("      认证/API 线索: 未发现");
 }
 JS
 }
@@ -752,41 +834,68 @@ cvm_detect() {
 
 _cvm_config_claude() {
   local config_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  local show_secrets="${1:-false}"
 
   echo -e "\n${BOLD}Claude Code 配置:${NC}"
   echo -e "───────────────────────────────────────────"
+  if [[ "$show_secrets" == "true" ]]; then
+    echo -e "  ${YELLOW}敏感值显示: 已开启${NC}"
+  fi
   echo -e "  目录: ${config_dir}"
   _cvm_file_report "settings.json" "$config_dir/settings.json"
-  _cvm_json_config_summary "$config_dir/settings.json"
+  _cvm_json_config_summary "$config_dir/settings.json" "$show_secrets"
+  _cvm_json_auth_summary "$config_dir/settings.json" "$show_secrets"
   _cvm_file_report "settings.local.json" "$config_dir/settings.local.json"
-  _cvm_json_config_summary "$config_dir/settings.local.json"
+  _cvm_json_config_summary "$config_dir/settings.local.json" "$show_secrets"
+  _cvm_json_auth_summary "$config_dir/settings.local.json" "$show_secrets"
   _cvm_file_report ".claude.json" "$HOME/.claude.json"
-  _cvm_json_config_summary "$HOME/.claude.json"
+  _cvm_json_config_summary "$HOME/.claude.json" "$show_secrets"
+  _cvm_json_auth_summary "$HOME/.claude.json" "$show_secrets"
   echo -e "───────────────────────────────────────────\n"
 }
 
 _cvm_config_codex() {
   local config_dir="${CODEX_HOME:-$HOME/.codex}"
+  local show_secrets="${1:-false}"
 
   echo -e "\n${BOLD}Codex 配置:${NC}"
   echo -e "───────────────────────────────────────────"
+  if [[ "$show_secrets" == "true" ]]; then
+    echo -e "  ${YELLOW}敏感值显示: 已开启${NC}"
+  fi
   echo -e "  目录: ${config_dir}"
   _cvm_file_report "config.toml" "$config_dir/config.toml"
-  _cvm_text_config_summary "$config_dir/config.toml"
+  _cvm_text_config_summary "$config_dir/config.toml" "$show_secrets"
+  _cvm_text_auth_summary "$config_dir/config.toml" "$show_secrets"
   _cvm_file_report "auth.json" "$config_dir/auth.json"
-  _cvm_json_config_summary "$config_dir/auth.json"
+  _cvm_json_config_summary "$config_dir/auth.json" "$show_secrets"
+  _cvm_json_auth_summary "$config_dir/auth.json" "$show_secrets"
   _cvm_file_report "AGENTS.md" "$config_dir/AGENTS.md"
   echo -e "───────────────────────────────────────────\n"
 }
 
 cvm_config() {
-  local target="${1:-all}"
+  local target="all"
+  local show_secrets=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      all|claude|codex) target="$1" ;;
+      --show-secrets|--raw) show_secrets=true ;;
+      *)
+        _cvm_err "用法: cvm config [claude|codex] [--show-secrets]"
+        return 1
+        ;;
+    esac
+    shift
+  done
+
   case "$target" in
-    all) _cvm_config_claude; _cvm_config_codex ;;
-    claude) _cvm_config_claude ;;
-    codex) _cvm_config_codex ;;
+    all) _cvm_config_claude "$show_secrets"; _cvm_config_codex "$show_secrets" ;;
+    claude) _cvm_config_claude "$show_secrets" ;;
+    codex) _cvm_config_codex "$show_secrets" ;;
     *)
-      _cvm_err "用法: cvm config [claude|codex]"
+      _cvm_err "用法: cvm config [claude|codex] [--show-secrets]"
       return 1
       ;;
   esac
@@ -830,7 +939,8 @@ ${BOLD}维护与诊断${NC}
   ${CYAN}cvm clean${NC}                   清理 npm/npx 下载缓存
   ${CYAN}cvm doctor${NC}                  检查 Node.js、npm、CVM 和 Claude 环境
   ${CYAN}cvm detect [claude|codex]${NC}   检测 Claude/Codex 安装来源
-  ${CYAN}cvm config [claude|codex]${NC}   读取配置文件信息并脱敏显示
+  ${CYAN}cvm config [claude|codex]${NC}   读取配置文件信息，默认脱敏
+  ${CYAN}cvm config ... --show-secrets${NC} 显示认证/API 原始值
   ${CYAN}cvm version | cvm -v${NC}        显示 CVM 自身版本
   ${CYAN}cvm help | cvm -h${NC}           显示本指令说明
 

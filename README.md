@@ -112,7 +112,8 @@ cvm use 2.1.177
 cvm install 2.1.177
 cvm uninstall 2.1.177
 cvm detect [claude|codex]
-cvm config [claude|codex]
+cvm config [claude|codex]                 # 默认脱敏显示
+cvm config [claude|codex] --show-secrets  # 显示认证/API 原始值
 cvm self-update
 
 cvm codex installed
