@@ -114,6 +114,11 @@ cvm uninstall 2.1.177
 cvm detect [claude|codex]
 cvm config [claude|codex]                 # 默认脱敏显示
 cvm config [claude|codex] --show-secrets  # 显示认证/API 原始值
+cvm config set claude api-url https://api.example.com
+cvm config set claude api-key sk-ant-...
+cvm config set claude model claude-opus-4-7
+cvm config clear claude api-url
+cvm menu                                  # 交互式配置菜单
 cvm self-update
 
 cvm codex installed
@@ -127,6 +132,7 @@ cvm codex uninstall 0.139.0
 ```text
 ~/.cvm/
 ├── cvm.sh
+├── env
 ├── pins
 ├── versions/
 └── codex-versions/

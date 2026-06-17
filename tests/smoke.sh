@@ -49,6 +49,19 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   printf "%s" "$codex_env_config" | grep -q "https://openai.example/v1"
   printf "%s" "$claude_env_config" | grep -q "API Key ANTHROPIC_API_KEY: string(len=11) <redacted>"
   ANTHROPIC_API_KEY="sk-ant-test" cvm config claude --show-secrets | grep -q "API Key ANTHROPIC_API_KEY: sk-ant-test"
+  cvm config set claude api-url "https://managed-anthropic.example/v1" >/dev/null
+  [[ "$ANTHROPIC_BASE_URL" == "https://managed-anthropic.example/v1" ]]
+  grep -q "ANTHROPIC_BASE_URL=.*https://managed-anthropic.example/v1" "$HOME/.cvm/env"
+  bash --noprofile --norc -c "CVM_DIR=\"$HOME/.cvm\"; source \"$HOME/.cvm/cvm.sh\"; [[ \"\$ANTHROPIC_BASE_URL\" == \"https://managed-anthropic.example/v1\" ]]"
+  cvm config clear claude api-url >/dev/null
+  [[ -z "${ANTHROPIC_BASE_URL:-}" ]]
+  if grep -q "ANTHROPIC_BASE_URL" "$HOME/.cvm/env"; then
+    exit 1
+  fi
+  printf "2\n3\ngpt-menu-test\n0\n0\n" | cvm menu >/dev/null
+  unset OPENAI_MODEL
+  source "$HOME/.cvm/env"
+  [[ "$OPENAI_MODEL" == "gpt-menu-test" ]]
   printf "%s" "$claude_config" | grep -q "apiKey: string(len=14) <redacted>"
   printf "%s" "$claude_config" | grep -q "oauth.accessToken: string(len=12) <redacted>"
   printf "%s" "$claude_config" | grep -q "model: claude-test-model"
