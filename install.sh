@@ -117,6 +117,7 @@ esac
 
 SHELL_RC="$(default_shell_rc)"
 INSTALL_FILE="$CVM_DIR/cvm.sh"
+# shellcheck disable=SC2016
 SOURCE_LINE='[ -s "$HOME/.cvm/cvm.sh" ] && source "$HOME/.cvm/cvm.sh"'
 
 if $GLOBAL_INSTALL; then
