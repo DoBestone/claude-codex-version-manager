@@ -39,6 +39,8 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
 
   cvm config claude >/dev/null
   cvm config codex >/dev/null
+  cvm help | grep -q "用法"
+  printf "0\n" | cvm >/dev/null
   claude_config="$(cvm config claude)"
   codex_config="$(cvm config codex)"
   printf "%s" "$claude_config" | grep -q "API URL ANTHROPIC_BASE_URL"

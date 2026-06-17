@@ -580,7 +580,7 @@ process.stdin.on("end", () => {
 
 _cvm_codex_command() {
   local cmd="${1:-}"
-  shift 2>/dev/null
+  shift 2>/dev/null || true
   case "$cmd" in
     use) _cvm_codex_use "$@" ;;
     install) _cvm_codex_install_version "$1" ;;
@@ -1160,6 +1160,11 @@ _cvm_profile_select() {
   printf '%s' "$name"
 }
 
+_cvm_profile_current() {
+  local target="$1"
+  _cvm_profile_json current "$target" 2>/dev/null
+}
+
 _cvm_profile_upsert() {
   local target="$1"
   local name="$2"
@@ -1333,7 +1338,7 @@ _cvm_profile_menu_target() {
 
 cvm_profile() {
   local cmd="${1:-list}"
-  shift 2>/dev/null
+  shift 2>/dev/null || true
   case "$cmd" in
     list|ls) _cvm_profile_list "${1:-all}" ;;
     create|add|set) _cvm_profile_upsert "$@" ;;
@@ -1407,15 +1412,34 @@ _cvm_menu_codex() {
   done
 }
 
+_cvm_menu_dashboard() {
+  local claude_profile codex_profile claude_url codex_url claude_model codex_model
+
+  claude_profile=$(_cvm_profile_current claude)
+  codex_profile=$(_cvm_profile_current codex)
+  claude_url="${ANTHROPIC_BASE_URL:-默认}"
+  codex_url="${OPENAI_BASE_URL:-${OPENAI_API_BASE:-默认}}"
+  claude_model="${ANTHROPIC_MODEL:-默认}"
+  codex_model="${OPENAI_MODEL:-默认}"
+
+  echo -e "\n${BOLD}CVM${NC} ${DIM}v${CVM_VERSION}${NC}"
+  echo -e "───────────────────────────────────────────"
+  printf "  Claude: profile=%s  model=%s  url=%s\n" "${claude_profile:-未选择}" "$claude_model" "$claude_url"
+  printf "  Codex:  profile=%s  model=%s  url=%s\n" "${codex_profile:-未选择}" "$codex_model" "$codex_url"
+  echo -e "───────────────────────────────────────────"
+}
+
 cvm_menu() {
   local choice
   while true; do
-    echo -e "\n${BOLD}CVM 交互式菜单${NC}"
+    _cvm_menu_dashboard
     echo "  1) Claude 模型配置管理"
     echo "  2) Codex 模型配置管理"
-    echo "  3) 查看全部当前配置"
+    echo "  3) 查看当前配置"
     echo "  4) 环境检测"
-    echo "  5) 高级单项配置(旧方式)"
+    echo "  5) 版本管理"
+    echo "  6) 高级单项配置"
+    echo "  h) 帮助"
     echo "  0) 退出"
     printf '请选择: '
     IFS= read -r choice
@@ -1425,6 +1449,18 @@ cvm_menu() {
       3) cvm_config all ;;
       4) cvm_detect all ;;
       5)
+        echo "  1) Claude 本地版本"
+        echo "  2) Codex 本地版本"
+        echo "  3) Claude 收藏"
+        printf '请选择: '
+        IFS= read -r choice
+        case "$choice" in
+          1) cvm_installed ;;
+          2) _cvm_codex_installed ;;
+          3) cvm_list ;;
+        esac
+        ;;
+      6)
         echo "  1) Claude 单项配置"
         echo "  2) Codex 单项配置"
         printf '请选择: '
@@ -1434,6 +1470,7 @@ cvm_menu() {
           2) _cvm_menu_codex ;;
         esac
         ;;
+      h|H|help) cvm_help ;;
       0) return 0 ;;
       *) _cvm_warn "无效选项" ;;
     esac
@@ -1638,7 +1675,8 @@ ${BOLD}常用示例${NC}
   cvm config set claude model claude-opus-4-7
   cvm profile add claude work https://api.example.com sk-ant-... claude-opus-4-7 socks5://127.0.0.1:7890
   cvm profile use claude work
-  cvm menu                  # 交互式配置
+  cvm                       # 打开交互式菜单
+  cvm help                  # 查看命令帮助
   codex-v 0.139.0           # 运行 Codex 0.139.0
   cvm remote                # 查看最近发布的版本
   claude-v-l               # 查看所有版本及发布时间
@@ -2211,7 +2249,7 @@ cvm_changelog() {
 
 cvm() {
   local cmd="${1:-}"
-  shift 2>/dev/null
+  shift 2>/dev/null || true
 
   case "$cmd" in
     codex)      _cvm_codex_command "$@" ;;
@@ -2232,11 +2270,13 @@ cvm() {
     doctor)     cvm_doctor "$@" ;;
     detect)     cvm_detect "$@" ;;
     config)     cvm_config "$@" ;;
-    menu)       cvm_menu "$@" ;;
     profile|profiles) cvm_profile "$@" ;;
     changelog)  cvm_changelog "$@" ;;
     version|-v) echo "cvm v${CVM_VERSION}" ;;
-    help|-h|--help|"")
+    ""|menu)
+      cvm_menu "$@"
+      ;;
+    help|-h|--help)
       cvm_help
       ;;
     *)

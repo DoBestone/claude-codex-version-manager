@@ -106,6 +106,9 @@ npx 缓存。
 ## CVM 子命令
 
 ```bash
+cvm                                      # 打开交互式菜单
+cvm menu                                 # 同上
+cvm help                                 # 显示命令帮助
 cvm doctor
 cvm installed
 cvm use 2.1.177
@@ -118,7 +121,6 @@ cvm config set claude api-url https://api.example.com
 cvm config set claude api-key sk-ant-...
 cvm config set claude model claude-opus-4-7
 cvm config clear claude api-url
-cvm menu                                  # 交互式配置菜单
 cvm profile list [claude|codex]
 cvm profile add claude work https://api.example.com sk-ant-... claude-opus-4-7 socks5://127.0.0.1:7890
 cvm profile use claude work
