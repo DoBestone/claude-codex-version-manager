@@ -39,18 +39,28 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
 
   cvm config claude >/dev/null
   cvm config codex >/dev/null
-  cvm config claude | grep -q "apiKey: string(len=14) <redacted>"
-  cvm config claude | grep -q "oauth.accessToken: string(len=12) <redacted>"
-  cvm config claude | grep -q "model: claude-test-model"
-  if cvm config claude | grep -q "lastSessionFirstPrompt"; then
+  claude_config="$(cvm config claude)"
+  codex_config="$(cvm config codex)"
+  printf "%s" "$claude_config" | grep -q "API URL ANTHROPIC_BASE_URL"
+  printf "%s" "$codex_config" | grep -q "API URL OPENAI_BASE_URL"
+  claude_env_config="$(ANTHROPIC_BASE_URL="https://anthropic.example/v1" ANTHROPIC_API_KEY="sk-ant-test" cvm config claude)"
+  codex_env_config="$(OPENAI_BASE_URL="https://openai.example/v1" cvm config codex)"
+  printf "%s" "$claude_env_config" | grep -q "https://anthropic.example/v1"
+  printf "%s" "$codex_env_config" | grep -q "https://openai.example/v1"
+  printf "%s" "$claude_env_config" | grep -q "API Key ANTHROPIC_API_KEY: string(len=11) <redacted>"
+  ANTHROPIC_API_KEY="sk-ant-test" cvm config claude --show-secrets | grep -q "API Key ANTHROPIC_API_KEY: sk-ant-test"
+  printf "%s" "$claude_config" | grep -q "apiKey: string(len=14) <redacted>"
+  printf "%s" "$claude_config" | grep -q "oauth.accessToken: string(len=12) <redacted>"
+  printf "%s" "$claude_config" | grep -q "model: claude-test-model"
+  if printf "%s" "$claude_config" | grep -q "lastSessionFirstPrompt"; then
     exit 1
   fi
-  cvm config codex | grep -q "api_key = <redacted>"
-  cvm config codex | grep -q "OPENAI_API_KEY: string(len=17) <redacted>"
-  if cvm config claude | grep -q "sk-test-secret"; then
+  printf "%s" "$codex_config" | grep -q "api_key = <redacted>"
+  printf "%s" "$codex_config" | grep -q "OPENAI_API_KEY: string(len=17) <redacted>"
+  if printf "%s" "$claude_config" | grep -q "sk-test-secret"; then
     exit 1
   fi
-  if cvm config codex | grep -q "codex-json-secret"; then
+  if printf "%s" "$codex_config" | grep -q "codex-json-secret"; then
     exit 1
   fi
   cvm config claude --show-secrets | grep -q "sk-test-secret"

@@ -764,6 +764,77 @@ _cvm_detect_codex() {
   echo -e "───────────────────────────────────────────\n"
 }
 
+_cvm_var_value() {
+  local name="$1"
+  local value
+  eval "value=\"\${${name}:-}\""
+  printf '%s' "$value"
+}
+
+_cvm_print_config_value() {
+  local label="$1"
+  local value="$2"
+  local show_raw="${3:-true}"
+  local default_text="${4:-未配置}"
+  local sensitive="${5:-false}"
+
+  if [[ -z "$value" ]]; then
+    echo -e "    ${label}: ${DIM}${default_text}${NC}"
+  elif [[ "$sensitive" == "true" && "$show_raw" != "true" ]]; then
+    echo "    ${label}: $(printf '%s' "$value" | node -e 'let d=""; process.stdin.on("data", c => d += c); process.stdin.on("end", () => console.log(`${typeof d}(len=${d.length}) <redacted>`));')"
+  else
+    echo "    ${label}: ${value}"
+  fi
+}
+
+_cvm_core_config_claude() {
+  local show_secrets="$1"
+  local model api_url api_key auth_token provider proxy
+
+  model=$(_cvm_var_value ANTHROPIC_MODEL)
+  api_url=$(_cvm_var_value ANTHROPIC_BASE_URL)
+  api_key=$(_cvm_var_value ANTHROPIC_API_KEY)
+  auth_token=$(_cvm_var_value ANTHROPIC_AUTH_TOKEN)
+  provider="official"
+  if [[ "$(_cvm_var_value CLAUDE_CODE_USE_BEDROCK)" == "1" || "$(_cvm_var_value CLAUDE_CODE_USE_BEDROCK)" == "true" ]]; then
+    provider="bedrock"
+  elif [[ "$(_cvm_var_value CLAUDE_CODE_USE_VERTEX)" == "1" || "$(_cvm_var_value CLAUDE_CODE_USE_VERTEX)" == "true" ]]; then
+    provider="vertex"
+  fi
+  proxy="$(_cvm_var_value HTTPS_PROXY)"
+  [[ -n "$proxy" ]] || proxy="$(_cvm_var_value HTTP_PROXY)"
+
+  echo -e "  ${BOLD}当前核心配置:${NC}"
+  _cvm_print_config_value "模型 ANTHROPIC_MODEL" "$model" true "未配置，使用 Claude Code 默认/文件 model"
+  _cvm_print_config_value "API URL ANTHROPIC_BASE_URL" "$api_url" true "未配置，使用 Claude 官方默认"
+  _cvm_print_config_value "API Key ANTHROPIC_API_KEY" "$api_key" "$show_secrets" "未配置" true
+  _cvm_print_config_value "Auth Token ANTHROPIC_AUTH_TOKEN" "$auth_token" "$show_secrets" "未配置" true
+  echo "    Provider: ${provider}"
+  _cvm_print_config_value "Proxy HTTP(S)_PROXY" "$proxy" "$show_secrets" "未配置" true
+}
+
+_cvm_core_config_codex() {
+  local show_secrets="$1"
+  local model api_url api_key org project proxy
+
+  model=$(_cvm_var_value OPENAI_MODEL)
+  api_url=$(_cvm_var_value OPENAI_BASE_URL)
+  [[ -n "$api_url" ]] || api_url=$(_cvm_var_value OPENAI_API_BASE)
+  api_key=$(_cvm_var_value OPENAI_API_KEY)
+  org=$(_cvm_var_value OPENAI_ORG_ID)
+  project=$(_cvm_var_value OPENAI_PROJECT_ID)
+  proxy="$(_cvm_var_value HTTPS_PROXY)"
+  [[ -n "$proxy" ]] || proxy="$(_cvm_var_value HTTP_PROXY)"
+
+  echo -e "  ${BOLD}当前核心配置:${NC}"
+  _cvm_print_config_value "模型 OPENAI_MODEL" "$model" true "未配置，使用 Codex 默认/文件 model"
+  _cvm_print_config_value "API URL OPENAI_BASE_URL" "$api_url" true "未配置，使用 OpenAI 官方默认"
+  _cvm_print_config_value "API Key OPENAI_API_KEY" "$api_key" "$show_secrets" "未配置" true
+  _cvm_print_config_value "Org OPENAI_ORG_ID" "$org" true
+  _cvm_print_config_value "Project OPENAI_PROJECT_ID" "$project" true
+  _cvm_print_config_value "Proxy HTTP(S)_PROXY" "$proxy" "$show_secrets" "未配置" true
+}
+
 cvm_detect() {
   local target="${1:-all}"
   case "$target" in
@@ -786,6 +857,7 @@ _cvm_config_claude() {
   if [[ "$show_secrets" == "true" ]]; then
     echo -e "  ${YELLOW}敏感值显示: 已开启${NC}"
   fi
+  _cvm_core_config_claude "$show_secrets"
   echo -e "  目录: ${config_dir}"
   _cvm_file_report "settings.json" "$config_dir/settings.json"
   _cvm_json_config_summary "$config_dir/settings.json" "$show_secrets"
@@ -805,6 +877,7 @@ _cvm_config_codex() {
   if [[ "$show_secrets" == "true" ]]; then
     echo -e "  ${YELLOW}敏感值显示: 已开启${NC}"
   fi
+  _cvm_core_config_codex "$show_secrets"
   echo -e "  目录: ${config_dir}"
   _cvm_file_report "config.toml" "$config_dir/config.toml"
   _cvm_text_config_summary "$config_dir/config.toml" "$show_secrets"
