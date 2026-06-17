@@ -60,6 +60,7 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   fi
   cvm profile add claude work "https://profile-anthropic.example/v1" "sk-profile" "claude-profile-model" "socks5://127.0.0.1:7890" >/dev/null
   cvm profile list claude | grep -q "work"
+  cvm profile list claude | grep -q "1)"
   cvm profile use claude work >/dev/null
   [[ "$ANTHROPIC_BASE_URL" == "https://profile-anthropic.example/v1" ]]
   [[ "$ANTHROPIC_API_KEY" == "sk-profile" ]]
@@ -69,7 +70,7 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   if cvm profile list claude | grep -q "work"; then
     exit 1
   fi
-  printf "2\n2\nmenu-codex\nhttps://menu-openai.example/v1\nsk-menu\ngpt-menu-test\nhttp://127.0.0.1:7890\n5\nmenu-codex\n0\n0\n" | cvm menu >/dev/null 2>&1
+  printf "2\n2\nmenu-codex\nhttps://menu-openai.example/v1\nsk-menu\ngpt-menu-test\nhttp://127.0.0.1:7890\n5\n1\n0\n0\n" | cvm menu >/dev/null 2>&1
   unset OPENAI_MODEL
   source "$HOME/.cvm/env"
   [[ "$OPENAI_MODEL" == "gpt-menu-test" ]]

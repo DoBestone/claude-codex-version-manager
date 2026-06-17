@@ -144,8 +144,9 @@ cvm codex uninstall 0.139.0
 ```
 
 `profiles.json` 保存多套模型/API 配置；`env` 保存当前生效配置。使用
-`cvm menu` 可以创建、编辑、删除、切换 Claude 或 Codex 配置。每套配置包含
-名称、API URL、API Key、模型和可选代理（`http://...` 或 `socks5://...`）。
+`cvm menu` 可以创建、编辑、删除、切换 Claude 或 Codex 配置，列表会显示编号，
+编辑、删除和切换都按编号选择。每套配置包含名称、API URL、API Key、模型和
+可选代理（`http://...` 或 `socks5://...`）。
 
 ## 卸载
 

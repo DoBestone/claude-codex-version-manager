@@ -1066,10 +1066,20 @@ const db = readDb();
 
 if (action === "list") {
   const target = args[0];
+  let index = 1;
   for (const [name, profile] of Object.entries(db[target].profiles)) {
     const mark = db[target].current === name ? "*" : " ";
-    console.log(`${mark}|${name}|${profile.apiUrl || ""}|${profile.model || ""}|${profile.proxy || ""}|${profile.apiKey ? "yes" : "no"}`);
+    console.log(`${index}|${mark}|${name}|${profile.apiUrl || ""}|${profile.model || ""}|${profile.proxy || ""}|${profile.apiKey ? "yes" : "no"}`);
+    index += 1;
   }
+} else if (action === "name-at") {
+  const [target, number] = args;
+  const index = Number(number);
+  if (!Number.isInteger(index) || index < 1) process.exit(2);
+  const names = Object.keys(db[target].profiles);
+  const name = names[index - 1];
+  if (!name) process.exit(2);
+  console.log(name);
 } else if (action === "get") {
   const [target, name, showSecrets] = args;
   const profile = db[target].profiles[name];
@@ -1101,7 +1111,7 @@ JS
 
 _cvm_profile_list() {
   local target="${1:-all}"
-  local row_output row mark name api_url model proxy has_key
+  local row_output row index mark name api_url model proxy has_key
 
   if [[ "$target" == "all" ]]; then
     _cvm_profile_list claude
@@ -1121,12 +1131,33 @@ _cvm_profile_list() {
   if [[ -z "$row_output" ]]; then
     echo -e "  ${DIM}(暂无配置)${NC}"
   else
-    while IFS='|' read -r mark name api_url model proxy has_key; do
+    while IFS='|' read -r index mark name api_url model proxy has_key; do
       [[ -z "$name" ]] && continue
-      printf "  %s %-18s model=%s url=%s key=%s proxy=%s\n" "$mark" "$name" "${model:-未配置}" "${api_url:-默认}" "$has_key" "${proxy:-无}"
+      printf "  %2s) %s %-18s model=%s url=%s key=%s proxy=%s\n" "$index" "$mark" "$name" "${model:-未配置}" "${api_url:-默认}" "$has_key" "${proxy:-无}"
     done <<< "$row_output"
   fi
   echo -e "───────────────────────────────────────────"
+}
+
+_cvm_profile_name_at() {
+  local target="$1"
+  local number="$2"
+  _cvm_profile_json name-at "$target" "$number" 2>/dev/null
+}
+
+_cvm_profile_select() {
+  local target="$1"
+  local label="$2"
+  local number name
+
+  _cvm_profile_list "$target" >&2
+  printf '%s编号: ' "$label" >&2
+  IFS= read -r number
+  name=$(_cvm_profile_name_at "$target" "$number") || {
+    _cvm_warn "无效编号"
+    return 1
+  }
+  printf '%s' "$name"
 }
 
 _cvm_profile_upsert() {
@@ -1290,9 +1321,9 @@ _cvm_profile_menu_target() {
     case "$choice" in
       1) _cvm_profile_list "$target" ;;
       2) _cvm_profile_prompt_upsert "$target" ;;
-      3) printf '配置名称: '; IFS= read -r name; _cvm_profile_prompt_upsert "$target" "$name" ;;
-      4) printf '配置名称: '; IFS= read -r name; [[ -n "$name" ]] && _cvm_profile_delete "$target" "$name" ;;
-      5) printf '配置名称: '; IFS= read -r name; [[ -n "$name" ]] && _cvm_profile_use "$target" "$name" ;;
+      3) name=$(_cvm_profile_select "$target" "编辑"); [[ -n "$name" ]] && _cvm_profile_prompt_upsert "$target" "$name" ;;
+      4) name=$(_cvm_profile_select "$target" "删除"); [[ -n "$name" ]] && _cvm_profile_delete "$target" "$name" ;;
+      5) name=$(_cvm_profile_select "$target" "切换"); [[ -n "$name" ]] && _cvm_profile_use "$target" "$name" ;;
       6) cvm_config "$target" ;;
       0) return 0 ;;
       *) _cvm_warn "无效选项" ;;
