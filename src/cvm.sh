@@ -1037,7 +1037,7 @@ _cvm_reset_var_list() {
 # `/logout` + re-login actually take effect.
 _cvm_reset() {
   local target="${1:-all}"
-  local var cleared=0 vars rc found_rc=""
+  local var cleared=0 vars rc found_rc="" pattern="" tmp
 
   case "$target" in
     claude|codex|all) ;;
@@ -1049,12 +1049,23 @@ _cvm_reset() {
 
   vars="$(_cvm_reset_var_list "$target")"
   for var in $vars; do
-    if [[ -n "${!var:-}" ]] || grep -q "^export ${var}=" "$CVM_ENV_FILE" 2>/dev/null; then
-      _cvm_config_clear_var "$var" >/dev/null 2>&1 || _cvm_env_write clear "$var" >/dev/null 2>&1 || true
-      unset "$var" 2>/dev/null || true
+    if [[ -n "$(_cvm_var_value "$var")" ]] || { [[ -f "$CVM_ENV_FILE" ]] && grep -q "^export ${var}=" "$CVM_ENV_FILE"; }; then
       cleared=$((cleared + 1))
     fi
+    unset "$var" 2>/dev/null || true
+    if [[ -n "$pattern" ]]; then pattern="${pattern}|${var}"; else pattern="$var"; fi
   done
+
+  # Scrub every target var from the env file in a single pass so the result is
+  # deterministic regardless of what is still exported in this shell.
+  if [[ -f "$CVM_ENV_FILE" && -n "$pattern" ]]; then
+    tmp="${CVM_ENV_FILE}.tmp.$$"
+    if grep -vE "^export (${pattern})=" "$CVM_ENV_FILE" > "$tmp" 2>/dev/null; then
+      mv "$tmp" "$CVM_ENV_FILE"
+    else
+      mv "$tmp" "$CVM_ENV_FILE" 2>/dev/null || rm -f "$tmp"
+    fi
+  fi
 
   if [[ "$cleared" -gt 0 ]]; then
     _cvm_log "已清除 ${CYAN}${cleared}${NC} 个 ${target} 覆盖变量，恢复官方状态"
