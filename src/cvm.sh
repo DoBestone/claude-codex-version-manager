@@ -627,40 +627,8 @@ _cvm_json_config_summary() {
 const fs = require("fs");
 const file = process.argv[2];
 const showSecrets = process.argv[3] === "true";
-const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
-
-function summarize(value, depth = 0, key = "") {
-  if (!showSecrets && sensitive.test(key)) return "<redacted>";
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return `[array:${value.length}]`;
-  if (depth >= 2) return `[object:${Object.keys(value).length} keys]`;
-  const out = {};
-  for (const [childKey, childValue] of Object.entries(value).slice(0, 30)) {
-    out[childKey] = summarize(childValue, depth + 1, childKey);
-  }
-  return out;
-}
-
-try {
-  const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-  console.log(JSON.stringify(summarize(parsed), null, 2).split("\n").map(line => `      ${line}`).join("\n"));
-} catch (error) {
-  console.log(`      JSON 解析失败: ${error.message}`);
-}
-JS
-}
-
-_cvm_json_auth_summary() {
-  local file="$1"
-  local show_secrets="${2:-false}"
-  [[ -f "$file" ]] || return 0
-
-  node - "$file" "$show_secrets" <<'JS'
-const fs = require("fs");
-const file = process.argv[2];
-const showSecrets = process.argv[3] === "true";
-const interesting = /(api|token|secret|key|password|passwd|auth|oauth|cookie|session|credential|login|account|email|org|organization)/i;
-const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
+const important = /(api|base.?url|url|endpoint|host|model|provider|token|secret|password|passwd|auth|oauth|cookie|session|credential|login|account|email|org|organization|permission|bypass|danger|proxy|region|workspace)/i;
+const sensitive = /(api.?key|token|secret|password|passwd|auth|cookie|session|credential)/i;
 const rows = [];
 
 function describe(value, key) {
@@ -668,13 +636,19 @@ function describe(value, key) {
   if (Array.isArray(value)) return `array(${value.length})`;
   if (typeof value === "object") return `object(${Object.keys(value).length} keys)`;
   if (!showSecrets && sensitive.test(key)) return `${typeof value}(len=${String(value).length}) <redacted>`;
-  if (typeof value === "string") return value.length > 80 ? `${value.slice(0, 77)}...` : value;
+  if (typeof value === "string") return value.length > 140 ? `${value.slice(0, 137)}...` : value;
   return String(value);
 }
 
 function walk(value, path = []) {
-  if (path.length && interesting.test(path.join("."))) {
-    rows.push([path.join("."), describe(value, path.at(-1) || "")]);
+  const joined = path.join(".");
+  if (/projects|cache|cached|tip|history|changelog|statsig|growthbook|experiments?|firstStartTime|firstTokenDate|numStartups|promptQueue|closedIssues/i.test(joined)) {
+    return;
+  }
+  if (path.length && important.test(joined)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      rows.push([joined, describe(value, path.at(-1) || "")]);
+    }
   }
   if (!value || typeof value !== "object" || path.length >= 6) return;
   for (const [key, child] of Object.entries(value)) walk(child, path.concat(key));
@@ -683,16 +657,16 @@ function walk(value, path = []) {
 try {
   walk(JSON.parse(fs.readFileSync(file, "utf8")));
   if (rows.length) {
-    console.log("      认证/API 线索:");
-    for (const [path, value] of rows.slice(0, 80)) {
+    console.log("      关键配置:");
+    for (const [path, value] of rows.slice(0, 120)) {
       console.log(`        ${path}: ${value}`);
     }
-    if (rows.length > 80) console.log(`        ... 另有 ${rows.length - 80} 项`);
+    if (rows.length > 120) console.log(`        ... 另有 ${rows.length - 120} 项`);
   } else {
-    console.log("      认证/API 线索: 未发现");
+    console.log("      关键配置: 未发现");
   }
 } catch (error) {
-  console.log(`      认证/API 线索解析失败: ${error.message}`);
+  console.log(`      关键配置解析失败: ${error.message}`);
 }
 JS
 }
@@ -706,12 +680,13 @@ _cvm_text_config_summary() {
 const fs = require("fs");
 const file = process.argv[2];
 const showSecrets = process.argv[3] === "true";
-const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
+const important = /(api|base.?url|url|endpoint|host|model|provider|token|secret|password|passwd|auth|oauth|cookie|session|credential|login|account|email|org|organization|permission|bypass|danger|proxy|region|workspace)/i;
+const sensitive = /(api.?key|token|secret|password|passwd|auth|cookie|session|credential)/i;
 const lines = fs.readFileSync(file, "utf8")
   .split(/\r?\n/)
   .map(line => line.trimEnd())
-  .filter(line => line.trim() && !line.trim().startsWith("#"))
-  .slice(0, 80)
+  .filter(line => line.trim() && !line.trim().startsWith("#") && important.test(line))
+  .slice(0, 120)
   .map(line => {
     const key = line.split("=")[0] || "";
     if (!showSecrets && sensitive.test(key)) return line.replace(/=.*/, "= <redacted>");
@@ -719,40 +694,10 @@ const lines = fs.readFileSync(file, "utf8")
   });
 
 if (lines.length) {
+  console.log("      关键配置:");
   console.log(lines.map(line => `      ${line}`).join("\n"));
 } else {
-  console.log("      (无可显示配置项)");
-}
-JS
-}
-
-_cvm_text_auth_summary() {
-  local file="$1"
-  local show_secrets="${2:-false}"
-  [[ -f "$file" ]] || return 0
-
-  node - "$file" "$show_secrets" <<'JS'
-const fs = require("fs");
-const file = process.argv[2];
-const showSecrets = process.argv[3] === "true";
-const interesting = /(api|token|secret|key|password|passwd|auth|oauth|cookie|session|credential|login|account|email|org|organization)/i;
-const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
-const rows = fs.readFileSync(file, "utf8")
-  .split(/\r?\n/)
-  .map(line => line.trim())
-  .filter(line => line && !line.startsWith("#") && interesting.test(line))
-  .slice(0, 80)
-  .map(line => {
-    const key = line.split("=")[0].trim();
-    if (!showSecrets && sensitive.test(key)) return line.replace(/=.*/, "= <redacted>");
-    return line.length > 160 ? `${line.slice(0, 157)}...` : line;
-  });
-
-if (rows.length) {
-  console.log("      认证/API 线索:");
-  console.log(rows.map(line => `        ${line}`).join("\n"));
-} else {
-  console.log("      认证/API 线索: 未发现");
+  console.log("      关键配置: 未发现");
 }
 JS
 }
@@ -844,13 +789,10 @@ _cvm_config_claude() {
   echo -e "  目录: ${config_dir}"
   _cvm_file_report "settings.json" "$config_dir/settings.json"
   _cvm_json_config_summary "$config_dir/settings.json" "$show_secrets"
-  _cvm_json_auth_summary "$config_dir/settings.json" "$show_secrets"
   _cvm_file_report "settings.local.json" "$config_dir/settings.local.json"
   _cvm_json_config_summary "$config_dir/settings.local.json" "$show_secrets"
-  _cvm_json_auth_summary "$config_dir/settings.local.json" "$show_secrets"
   _cvm_file_report ".claude.json" "$HOME/.claude.json"
   _cvm_json_config_summary "$HOME/.claude.json" "$show_secrets"
-  _cvm_json_auth_summary "$HOME/.claude.json" "$show_secrets"
   echo -e "───────────────────────────────────────────\n"
 }
 
@@ -866,10 +808,8 @@ _cvm_config_codex() {
   echo -e "  目录: ${config_dir}"
   _cvm_file_report "config.toml" "$config_dir/config.toml"
   _cvm_text_config_summary "$config_dir/config.toml" "$show_secrets"
-  _cvm_text_auth_summary "$config_dir/config.toml" "$show_secrets"
   _cvm_file_report "auth.json" "$config_dir/auth.json"
   _cvm_json_config_summary "$config_dir/auth.json" "$show_secrets"
-  _cvm_json_auth_summary "$config_dir/auth.json" "$show_secrets"
   _cvm_file_report "AGENTS.md" "$config_dir/AGENTS.md"
   echo -e "───────────────────────────────────────────\n"
 }

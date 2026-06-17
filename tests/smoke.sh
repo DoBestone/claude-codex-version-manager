@@ -20,6 +20,7 @@ bash "$ROOT/install.sh"
 
 mkdir -p "$TEMP_HOME/.claude" "$TEMP_HOME/.codex"
 printf '%s\n' '{"apiKey":"sk-test-secret","oauth":{"accessToken":"oauth-secret"},"account":{"email":"user@example.com"}}' > "$TEMP_HOME/.claude/settings.json"
+printf '%s\n' '{"projects":{"/tmp/noise":{"lastSessionFirstPrompt":"do not show"}},"model":"claude-test-model"}' > "$TEMP_HOME/.claude.json"
 printf '%s\n' 'api_key = "codex-secret"' > "$TEMP_HOME/.codex/config.toml"
 printf '%s\n' '{"OPENAI_API_KEY":"codex-json-secret","account":{"email":"user@example.com"}}' > "$TEMP_HOME/.codex/auth.json"
 
@@ -40,6 +41,10 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   cvm config codex >/dev/null
   cvm config claude | grep -q "apiKey: string(len=14) <redacted>"
   cvm config claude | grep -q "oauth.accessToken: string(len=12) <redacted>"
+  cvm config claude | grep -q "model: claude-test-model"
+  if cvm config claude | grep -q "lastSessionFirstPrompt"; then
+    exit 1
+  fi
   cvm config codex | grep -q "api_key = <redacted>"
   cvm config codex | grep -q "OPENAI_API_KEY: string(len=17) <redacted>"
   if cvm config claude | grep -q "sk-test-secret"; then
