@@ -590,6 +590,208 @@ _cvm_codex_command() {
   esac
 }
 
+# ── Detection and config inspection ─────────────────────────────────────────
+
+_cvm_file_report() {
+  local label="$1"
+  local file="$2"
+
+  if [[ -f "$file" ]]; then
+    node - "$label" "$file" <<'JS'
+const fs = require("fs");
+const [label, file] = process.argv.slice(2);
+const stat = fs.statSync(file);
+const modified = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+}).format(stat.mtime).replace(/\//g, "-");
+console.log(`  \x1b[0;32m✔\x1b[0m ${label}: ${file}`);
+console.log(`      大小: ${stat.size} bytes  修改: ${modified}`);
+JS
+  else
+    echo -e "  ${DIM}·${NC} ${label}: ${file} ${DIM}(不存在)${NC}"
+  fi
+}
+
+_cvm_json_config_summary() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+
+  node - "$file" <<'JS'
+const fs = require("fs");
+const file = process.argv[2];
+const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
+
+function summarize(value, depth = 0, key = "") {
+  if (sensitive.test(key)) return "<redacted>";
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return `[array:${value.length}]`;
+  if (depth >= 2) return `[object:${Object.keys(value).length} keys]`;
+  const out = {};
+  for (const [childKey, childValue] of Object.entries(value).slice(0, 30)) {
+    out[childKey] = summarize(childValue, depth + 1, childKey);
+  }
+  return out;
+}
+
+try {
+  const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+  console.log(JSON.stringify(summarize(parsed), null, 2).split("\n").map(line => `      ${line}`).join("\n"));
+} catch (error) {
+  console.log(`      JSON 解析失败: ${error.message}`);
+}
+JS
+}
+
+_cvm_text_config_summary() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+
+  node - "$file" <<'JS'
+const fs = require("fs");
+const file = process.argv[2];
+const sensitive = /(token|secret|key|password|passwd|auth|cookie|session|credential)/i;
+const lines = fs.readFileSync(file, "utf8")
+  .split(/\r?\n/)
+  .map(line => line.trimEnd())
+  .filter(line => line.trim() && !line.trim().startsWith("#"))
+  .slice(0, 80)
+  .map(line => {
+    const key = line.split("=")[0] || "";
+    if (sensitive.test(key)) return line.replace(/=.*/, "= <redacted>");
+    return line.length > 160 ? `${line.slice(0, 157)}...` : line;
+  });
+
+if (lines.length) {
+  console.log(lines.map(line => `      ${line}`).join("\n"));
+} else {
+  console.log("      (无可显示配置项)");
+}
+JS
+}
+
+_cvm_detect_claude() {
+  local current_entry current_ver global_root package_json global_ver count
+
+  echo -e "\n${BOLD}Claude Code 安装检测:${NC}"
+  echo -e "───────────────────────────────────────────"
+
+  current_entry=$(command -v claude 2>/dev/null)
+  if [[ -n "$current_entry" ]]; then
+    current_ver=$(_cvm_current_version)
+    echo -e "  ${GREEN}✔${NC} PATH    ${current_entry} ${DIM}${current_ver:+v$current_ver}${NC}"
+  else
+    echo -e "  ${DIM}·${NC} PATH    未找到 claude"
+  fi
+
+  count=$(find "$CVM_VERSIONS_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+  echo -e "  ${GREEN}✔${NC} CVM     ${CVM_VERSIONS_DIR} ${DIM}(${count:-0} 个目录)${NC}"
+
+  global_root=$(npm root -g 2>/dev/null)
+  package_json="$global_root/$CVM_NPM_PACKAGE/package.json"
+  if [[ -f "$package_json" ]]; then
+    global_ver=$(node -p "require('$package_json').version" 2>/dev/null)
+    echo -e "  ${GREEN}✔${NC} npm -g  ${global_root}/$CVM_NPM_PACKAGE ${DIM}${global_ver:+v$global_ver}${NC}"
+  else
+    echo -e "  ${DIM}·${NC} npm -g  未找到 ${CVM_NPM_PACKAGE}"
+  fi
+
+  count=$(find "$HOME/.npm/_npx" -path "*/node_modules/$CVM_NPM_PACKAGE/package.json" -type f 2>/dev/null | wc -l | tr -d ' ')
+  echo -e "  ${GREEN}✔${NC} npx     ${HOME}/.npm/_npx ${DIM}(${count:-0} 个缓存)${NC}"
+  echo -e "───────────────────────────────────────────\n"
+}
+
+_cvm_detect_codex() {
+  local current_entry current_ver global_root package_json global_ver count
+
+  echo -e "\n${BOLD}Codex 安装检测:${NC}"
+  echo -e "───────────────────────────────────────────"
+
+  current_entry=$(command -v codex 2>/dev/null)
+  if [[ -n "$current_entry" ]]; then
+    current_ver=$(_cvm_codex_version_from_entry "$current_entry")
+    echo -e "  ${GREEN}✔${NC} PATH    ${current_entry} ${DIM}${current_ver:+v$current_ver}${NC}"
+  else
+    echo -e "  ${DIM}·${NC} PATH    未找到 codex"
+  fi
+
+  count=$(find "$CVM_CODEX_VERSIONS_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+  echo -e "  ${GREEN}✔${NC} CVM     ${CVM_CODEX_VERSIONS_DIR} ${DIM}(${count:-0} 个目录)${NC}"
+
+  global_root=$(npm root -g 2>/dev/null)
+  package_json="$global_root/$CVM_CODEX_NPM_PACKAGE/package.json"
+  if [[ -f "$package_json" ]]; then
+    global_ver=$(node -p "require('$package_json').version" 2>/dev/null)
+    echo -e "  ${GREEN}✔${NC} npm -g  ${global_root}/$CVM_CODEX_NPM_PACKAGE ${DIM}${global_ver:+v$global_ver}${NC}"
+  else
+    echo -e "  ${DIM}·${NC} npm -g  未找到 ${CVM_CODEX_NPM_PACKAGE}"
+  fi
+
+  count=$(find "$HOME/.npm/_npx" -path "*/node_modules/$CVM_CODEX_NPM_PACKAGE/package.json" -type f 2>/dev/null | wc -l | tr -d ' ')
+  echo -e "  ${GREEN}✔${NC} npx     ${HOME}/.npm/_npx ${DIM}(${count:-0} 个缓存)${NC}"
+  echo -e "───────────────────────────────────────────\n"
+}
+
+cvm_detect() {
+  local target="${1:-all}"
+  case "$target" in
+    all) _cvm_detect_claude; _cvm_detect_codex ;;
+    claude) _cvm_detect_claude ;;
+    codex) _cvm_detect_codex ;;
+    *)
+      _cvm_err "用法: cvm detect [claude|codex]"
+      return 1
+      ;;
+  esac
+}
+
+_cvm_config_claude() {
+  local config_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
+  echo -e "\n${BOLD}Claude Code 配置:${NC}"
+  echo -e "───────────────────────────────────────────"
+  echo -e "  目录: ${config_dir}"
+  _cvm_file_report "settings.json" "$config_dir/settings.json"
+  _cvm_json_config_summary "$config_dir/settings.json"
+  _cvm_file_report "settings.local.json" "$config_dir/settings.local.json"
+  _cvm_json_config_summary "$config_dir/settings.local.json"
+  _cvm_file_report ".claude.json" "$HOME/.claude.json"
+  _cvm_json_config_summary "$HOME/.claude.json"
+  echo -e "───────────────────────────────────────────\n"
+}
+
+_cvm_config_codex() {
+  local config_dir="${CODEX_HOME:-$HOME/.codex}"
+
+  echo -e "\n${BOLD}Codex 配置:${NC}"
+  echo -e "───────────────────────────────────────────"
+  echo -e "  目录: ${config_dir}"
+  _cvm_file_report "config.toml" "$config_dir/config.toml"
+  _cvm_text_config_summary "$config_dir/config.toml"
+  _cvm_file_report "auth.json" "$config_dir/auth.json"
+  _cvm_json_config_summary "$config_dir/auth.json"
+  _cvm_file_report "AGENTS.md" "$config_dir/AGENTS.md"
+  echo -e "───────────────────────────────────────────\n"
+}
+
+cvm_config() {
+  local target="${1:-all}"
+  case "$target" in
+    all) _cvm_config_claude; _cvm_config_codex ;;
+    claude) _cvm_config_claude ;;
+    codex) _cvm_config_codex ;;
+    *)
+      _cvm_err "用法: cvm config [claude|codex]"
+      return 1
+      ;;
+  esac
+}
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 
 # Show help
@@ -627,6 +829,8 @@ ${BOLD}维护与诊断${NC}
   ${CYAN}cvm update${NC}                  将系统全局 claude 更新到最新版
   ${CYAN}cvm clean${NC}                   清理 npm/npx 下载缓存
   ${CYAN}cvm doctor${NC}                  检查 Node.js、npm、CVM 和 Claude 环境
+  ${CYAN}cvm detect [claude|codex]${NC}   检测 Claude/Codex 安装来源
+  ${CYAN}cvm config [claude|codex]${NC}   读取配置文件信息并脱敏显示
   ${CYAN}cvm version | cvm -v${NC}        显示 CVM 自身版本
   ${CYAN}cvm help | cvm -h${NC}           显示本指令说明
 
@@ -655,6 +859,8 @@ ${BOLD}快捷指令${NC}
   ${CYAN}claude-versions${NC}             查看 npm 全部可用版本
   ${CYAN}claude-clean${NC}                清理 npm/npx 缓存
   ${CYAN}claude-update${NC}               更新系统全局 Claude Code
+  ${CYAN}claude-detect${NC}               检测 Claude Code 安装来源
+  ${CYAN}claude-config${NC}               读取 Claude Code 配置文件信息
   ${CYAN}codex-<版本>${NC}                自动安装并运行指定 Codex 版本
   ${CYAN}codex-auto-<版本>${NC}           指定版本跳过审批与沙箱运行
   ${CYAN}codex-v <版本>${NC}              等同 cvm codex use <版本>
@@ -666,6 +872,8 @@ ${BOLD}快捷指令${NC}
   ${CYAN}codex-current${NC}               显示当前系统 Codex 版本
   ${CYAN}codex-uninstall <版本>${NC}      卸载指定 Codex 版本
   ${CYAN}codex-remove <版本>${NC}         等同 codex-uninstall
+  ${CYAN}codex-detect${NC}                检测 Codex 安装来源
+  ${CYAN}codex-config${NC}                读取 Codex 配置文件信息
 
 ${BOLD}常用示例${NC}
   cvm use 2.1.90            # 临时使用 2.1.90 版本
@@ -1265,6 +1473,8 @@ cvm() {
     update)     cvm_update "$@" ;;
     clean)      cvm_clean "$@" ;;
     doctor)     cvm_doctor "$@" ;;
+    detect)     cvm_detect "$@" ;;
+    config)     cvm_config "$@" ;;
     changelog)  cvm_changelog "$@" ;;
     version|-v) echo "cvm v${CVM_VERSION}" ;;
     help|-h|--help|"")
@@ -1310,6 +1520,14 @@ claude-clean() {
 
 claude-update() {
   cvm_update
+}
+
+claude-detect() {
+  cvm_detect claude
+}
+
+claude-config() {
+  cvm_config claude
 }
 
 claude-install() {
@@ -1404,6 +1622,14 @@ codex-clean() {
   cvm_clean
 }
 
+codex-detect() {
+  cvm_detect codex
+}
+
+codex-config() {
+  cvm_config codex
+}
+
 codex-update() {
   local current_entry
   current_entry=$(command -v codex 2>/dev/null)
@@ -1468,6 +1694,43 @@ if [[ -n "$ZSH_VERSION" ]]; then
     fi
 
     print -u2 "zsh: command not found: $command_name"
+    return 127
+  }
+elif [[ -n "$BASH_VERSION" ]]; then
+  if declare -F command_not_found_handle >/dev/null 2>&1; then
+    eval "$(declare -f command_not_found_handle | sed '1s/command_not_found_handle/_cvm_previous_command_not_found_handle/')"
+  fi
+
+  command_not_found_handle() {
+    local command_name="$1"
+    shift
+
+    if [[ "$command_name" =~ ^claude-auto-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+      cvm_use "${BASH_REMATCH[1]}" --permission-mode bypassPermissions "$@"
+      return $?
+    fi
+
+    if [[ "$command_name" =~ ^claude-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+      cvm_use "${BASH_REMATCH[1]}" "$@"
+      return $?
+    fi
+
+    if [[ "$command_name" =~ ^codex-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+      _cvm_codex_use "${BASH_REMATCH[1]}" "$@"
+      return $?
+    fi
+
+    if [[ "$command_name" =~ ^codex-auto-([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+      _cvm_codex_use "${BASH_REMATCH[1]}" --dangerously-bypass-approvals-and-sandbox "$@"
+      return $?
+    fi
+
+    if declare -F _cvm_previous_command_not_found_handle >/dev/null 2>&1; then
+      _cvm_previous_command_not_found_handle "$command_name" "$@"
+      return $?
+    fi
+
+    printf 'bash: %s: command not found\n' "$command_name" >&2
     return 127
   }
 fi

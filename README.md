@@ -24,6 +24,20 @@ source ~/.cvm/cvm.sh
 收藏或缓存导入结果。默认会按当前 shell 写入 `~/.zshrc`、`~/.bashrc` 或
 `~/.profile`；也可以通过 `CVM_SHELL_RC=/path/to/rc bash install.sh` 指定。
 
+以 root 运行时默认启用全局安装：管理脚本写入 `/usr/local/share/cvm/cvm.sh`，
+固定命令包装器写入 `/usr/local/bin`，并通过 `/etc/profile.d/cvm.sh` 为新
+shell 加载动态版本命令。普通用户也可以显式执行：
+
+```bash
+bash install.sh --global
+```
+
+全局包装器支持 `cvm`、`claude-v-l`、`claude-v`、`codex-v` 等固定命令。
+安装器还会尽量从 npm 读取已发布版本，并生成 `claude-2.1.175`、
+`claude-auto-2.1.175`、`codex-0.139.0` 这类版本化全局命令。若安装时无法
+读取 npm 版本列表，仍可使用等价命令 `claude-v 2.1.175` 或
+`codex-v 0.139.0`。
+
 本地克隆安装：
 
 ```bash
@@ -53,6 +67,8 @@ claude-auto-2.1.177   # 指定版本免权限确认运行
 claude-latest         # 临时运行 npm 最新版
 claude-versions       # npm 全部版本
 claude-update         # 更新全局 Claude Code
+claude-detect         # 检测 Claude Code 安装来源
+claude-config         # 读取 Claude Code 配置文件信息（敏感字段脱敏）
 ```
 
 `claude-v-a`、`claude-v-l`、`claude-v-r` 保留为兼容别名。
@@ -74,6 +90,8 @@ codex-auto-0.139.0    # 指定版本跳过审批与沙箱运行
 codex-latest          # 临时运行 npm 最新版
 codex-versions        # npm 全部版本
 codex-update          # 按当前来源使用 Homebrew(macOS) 或 npm 更新
+codex-detect          # 检测 Codex 安装来源
+codex-config          # 读取 Codex 配置文件信息（敏感字段脱敏）
 ```
 
 `codex-v-a`、`codex-v-l`、`codex-v-r` 保留为兼容别名。
@@ -93,6 +111,8 @@ cvm installed
 cvm use 2.1.177
 cvm install 2.1.177
 cvm uninstall 2.1.177
+cvm detect [claude|codex]
+cvm config [claude|codex]
 cvm self-update
 
 cvm codex installed
