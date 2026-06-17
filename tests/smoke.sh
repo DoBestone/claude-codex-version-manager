@@ -58,10 +58,24 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   if grep -q "ANTHROPIC_BASE_URL" "$HOME/.cvm/env"; then
     exit 1
   fi
-  printf "2\n3\ngpt-menu-test\n0\n0\n" | cvm menu >/dev/null
+  cvm profile add claude work "https://profile-anthropic.example/v1" "sk-profile" "claude-profile-model" "socks5://127.0.0.1:7890" >/dev/null
+  cvm profile list claude | grep -q "work"
+  cvm profile use claude work >/dev/null
+  [[ "$ANTHROPIC_BASE_URL" == "https://profile-anthropic.example/v1" ]]
+  [[ "$ANTHROPIC_API_KEY" == "sk-profile" ]]
+  [[ "$ANTHROPIC_MODEL" == "claude-profile-model" ]]
+  [[ "$HTTPS_PROXY" == "socks5://127.0.0.1:7890" ]]
+  cvm profile delete claude work >/dev/null
+  if cvm profile list claude | grep -q "work"; then
+    exit 1
+  fi
+  printf "2\n2\nmenu-codex\nhttps://menu-openai.example/v1\nsk-menu\ngpt-menu-test\nhttp://127.0.0.1:7890\n5\nmenu-codex\n0\n0\n" | cvm menu >/dev/null 2>&1
   unset OPENAI_MODEL
   source "$HOME/.cvm/env"
   [[ "$OPENAI_MODEL" == "gpt-menu-test" ]]
+  [[ "$OPENAI_BASE_URL" == "https://menu-openai.example/v1" ]]
+  [[ "$OPENAI_API_KEY" == "sk-menu" ]]
+  [[ "$HTTPS_PROXY" == "http://127.0.0.1:7890" ]]
   printf "%s" "$claude_config" | grep -q "apiKey: string(len=14) <redacted>"
   printf "%s" "$claude_config" | grep -q "oauth.accessToken: string(len=12) <redacted>"
   printf "%s" "$claude_config" | grep -q "model: claude-test-model"

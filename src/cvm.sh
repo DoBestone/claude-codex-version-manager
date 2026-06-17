@@ -14,6 +14,7 @@ CVM_CODEX_NPM_PACKAGE="@openai/codex"
 CVM_CODEX_VERSIONS_DIR="$CVM_DIR/codex-versions"
 CVM_REGISTRY="${CVM_REGISTRY:-https://registry.npmjs.org}"
 CVM_ENV_FILE="${CVM_ENV_FILE:-$CVM_DIR/env}"
+CVM_PROFILES_FILE="${CVM_PROFILES_FILE:-$CVM_DIR/profiles.json}"
 
 # ── Colors ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -1025,6 +1026,296 @@ _cvm_prompt_value() {
   printf '%s' "$value"
 }
 
+_cvm_profile_valid_target() {
+  [[ "$1" == "claude" || "$1" == "codex" ]]
+}
+
+_cvm_profile_json() {
+  local action="$1"
+  shift
+  _cvm_ensure_dir
+  node - "$CVM_PROFILES_FILE" "$action" "$@" <<'JS'
+const fs = require("fs");
+const [file, action, ...args] = process.argv.slice(2);
+const empty = { claude: { current: "", profiles: {} }, codex: { current: "", profiles: {} } };
+const cloneEmpty = () => JSON.parse(JSON.stringify(empty));
+
+function readDb() {
+  try {
+    if (!fs.existsSync(file)) return cloneEmpty();
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+    return {
+      claude: { current: parsed.claude?.current || "", profiles: parsed.claude?.profiles || {} },
+      codex: { current: parsed.codex?.current || "", profiles: parsed.codex?.profiles || {} },
+    };
+  } catch {
+    return cloneEmpty();
+  }
+}
+
+function writeDb(db) {
+  fs.mkdirSync(require("path").dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(db, null, 2)}\n`);
+}
+
+function mask(value) {
+  return value ? `string(len=${String(value).length}) <redacted>` : "";
+}
+
+const db = readDb();
+
+if (action === "list") {
+  const target = args[0];
+  for (const [name, profile] of Object.entries(db[target].profiles)) {
+    const mark = db[target].current === name ? "*" : " ";
+    console.log(`${mark}|${name}|${profile.apiUrl || ""}|${profile.model || ""}|${profile.proxy || ""}|${profile.apiKey ? "yes" : "no"}`);
+  }
+} else if (action === "get") {
+  const [target, name, showSecrets] = args;
+  const profile = db[target].profiles[name];
+  if (!profile) process.exit(2);
+  console.log(JSON.stringify(showSecrets === "true" ? profile : { ...profile, apiKey: mask(profile.apiKey) }));
+} else if (action === "upsert") {
+  const [target, name, apiUrl, apiKey, model, proxy] = args;
+  db[target].profiles[name] = { apiUrl, apiKey, model, proxy };
+  writeDb(db);
+} else if (action === "delete") {
+  const [target, name] = args;
+  delete db[target].profiles[name];
+  if (db[target].current === name) db[target].current = "";
+  writeDb(db);
+} else if (action === "current") {
+  const target = args[0];
+  console.log(db[target].current || "");
+} else if (action === "set-current") {
+  const [target, name] = args;
+  if (!db[target].profiles[name]) process.exit(2);
+  db[target].current = name;
+  writeDb(db);
+} else {
+  console.error(`Unsupported profile action: ${action}`);
+  process.exit(1);
+}
+JS
+}
+
+_cvm_profile_list() {
+  local target="${1:-all}"
+  local row_output row mark name api_url model proxy has_key
+
+  if [[ "$target" == "all" ]]; then
+    _cvm_profile_list claude
+    _cvm_profile_list codex
+    return 0
+  fi
+  _cvm_profile_valid_target "$target" || {
+    _cvm_err "目标只能是 claude 或 codex"
+    return 1
+  }
+
+  echo -e "\n${BOLD}${target} profiles:${NC}"
+  echo -e "───────────────────────────────────────────"
+  if ! row_output=$(_cvm_profile_json list "$target"); then
+    return 1
+  fi
+  if [[ -z "$row_output" ]]; then
+    echo -e "  ${DIM}(暂无配置)${NC}"
+  else
+    while IFS='|' read -r mark name api_url model proxy has_key; do
+      [[ -z "$name" ]] && continue
+      printf "  %s %-18s model=%s url=%s key=%s proxy=%s\n" "$mark" "$name" "${model:-未配置}" "${api_url:-默认}" "$has_key" "${proxy:-无}"
+    done <<< "$row_output"
+  fi
+  echo -e "───────────────────────────────────────────"
+}
+
+_cvm_profile_upsert() {
+  local target="$1"
+  local name="$2"
+  local api_url="$3"
+  local api_key="$4"
+  local model="$5"
+  local proxy="${6:-}"
+
+  _cvm_profile_valid_target "$target" || {
+    _cvm_err "目标只能是 claude 或 codex"
+    return 1
+  }
+  [[ -n "$name" ]] || {
+    _cvm_err "请指定配置名称"
+    return 1
+  }
+  _cvm_profile_json upsert "$target" "$name" "$api_url" "$api_key" "$model" "$proxy" || return 1
+  _cvm_log "已保存 ${CYAN}${target}/${name}${NC}"
+}
+
+_cvm_profile_delete() {
+  local target="$1"
+  local name="$2"
+  _cvm_profile_valid_target "$target" || {
+    _cvm_err "目标只能是 claude 或 codex"
+    return 1
+  }
+  [[ -n "$name" ]] || {
+    _cvm_err "请指定配置名称"
+    return 1
+  }
+  _cvm_profile_json delete "$target" "$name" || return 1
+  _cvm_log "已删除 ${CYAN}${target}/${name}${NC}"
+}
+
+_cvm_env_apply_profile() {
+  local target="$1"
+  local name="$2"
+  local json
+
+  json=$(_cvm_profile_json get "$target" "$name" true) || {
+    _cvm_err "未找到配置: ${target}/${name}"
+    return 1
+  }
+
+  _cvm_ensure_dir
+  node - "$CVM_ENV_FILE" "$target" "$json" <<'JS'
+const fs = require("fs");
+const [file, target, json] = process.argv.slice(2);
+const profile = JSON.parse(json);
+const vars = [
+  "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_MODEL",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "OPENAI_BASE_URL",
+  "OPENAI_API_KEY",
+  "OPENAI_MODEL",
+  "OPENAI_ORG_ID",
+  "OPENAI_PROJECT_ID",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+];
+const env = {};
+for (const key of vars) if (process.env[key]) env[key] = process.env[key];
+
+if (target === "claude") {
+  delete env.ANTHROPIC_BASE_URL;
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_MODEL;
+  if (profile.apiUrl) env.ANTHROPIC_BASE_URL = profile.apiUrl;
+  if (profile.apiKey) env.ANTHROPIC_API_KEY = profile.apiKey;
+  if (profile.model) env.ANTHROPIC_MODEL = profile.model;
+} else {
+  delete env.OPENAI_BASE_URL;
+  delete env.OPENAI_API_KEY;
+  delete env.OPENAI_MODEL;
+  if (profile.apiUrl) env.OPENAI_BASE_URL = profile.apiUrl;
+  if (profile.apiKey) env.OPENAI_API_KEY = profile.apiKey;
+  if (profile.model) env.OPENAI_MODEL = profile.model;
+}
+delete env.HTTPS_PROXY;
+delete env.HTTP_PROXY;
+if (profile.proxy) {
+  env.HTTPS_PROXY = profile.proxy;
+  env.HTTP_PROXY = profile.proxy;
+}
+
+function quoteShell(raw) {
+  return `'${String(raw).replace(/'/g, `'\\''`)}'`;
+}
+const lines = ["# Generated by CVM. Edit with `cvm config set`, `cvm profile`, or `cvm menu`.", ""];
+for (const key of vars) if (env[key]) lines.push(`export ${key}=${quoteShell(env[key])}`);
+fs.writeFileSync(file, `${lines.join("\n")}\n`);
+JS
+  source "$CVM_ENV_FILE"
+}
+
+_cvm_profile_use() {
+  local target="$1"
+  local name="$2"
+
+  _cvm_profile_valid_target "$target" || {
+    _cvm_err "目标只能是 claude 或 codex"
+    return 1
+  }
+  [[ -n "$name" ]] || {
+    _cvm_err "请指定配置名称"
+    return 1
+  }
+  _cvm_env_apply_profile "$target" "$name" || return 1
+  _cvm_profile_json set-current "$target" "$name" || return 1
+  _cvm_log "当前 ${target} 配置已切换为 ${CYAN}${name}${NC}"
+}
+
+_cvm_profile_prompt_upsert() {
+  local target="$1"
+  local existing="${2:-}"
+  local name api_url api_key model proxy current_json current_api_url current_api_key current_model current_proxy
+
+  if [[ -n "$existing" ]]; then
+    current_json=$(_cvm_profile_json get "$target" "$existing" true 2>/dev/null || true)
+    if [[ -n "$current_json" ]]; then
+      current_api_url=$(printf '%s' "$current_json" | node -p 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); p.apiUrl || ""')
+      current_api_key=$(printf '%s' "$current_json" | node -p 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); p.apiKey || ""')
+      current_model=$(printf '%s' "$current_json" | node -p 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); p.model || ""')
+      current_proxy=$(printf '%s' "$current_json" | node -p 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(0,"utf8")); p.proxy || ""')
+    fi
+  fi
+
+  name=$(_cvm_prompt_value "配置名称" "$existing")
+  [[ -n "$name" ]] || {
+    _cvm_warn "已取消"
+    return 0
+  }
+  api_url=$(_cvm_prompt_value "API URL" "${current_api_url:-}")
+  api_key=$(_cvm_prompt_value "API Key" "${current_api_key:-}")
+  model=$(_cvm_prompt_value "模型" "${current_model:-}")
+  proxy=$(_cvm_prompt_value "代理(可选，http:// 或 socks5://)" "${current_proxy:-}")
+  _cvm_profile_upsert "$target" "$name" "$api_url" "$api_key" "$model" "$proxy"
+}
+
+_cvm_profile_menu_target() {
+  local target="$1"
+  local choice name
+  while true; do
+    echo -e "\n${BOLD}${target} 模型配置管理${NC}"
+    echo "  1) 列表"
+    echo "  2) 创建配置"
+    echo "  3) 编辑配置"
+    echo "  4) 删除配置"
+    echo "  5) 切换为当前配置"
+    echo "  6) 查看当前生效配置"
+    echo "  0) 返回"
+    printf '请选择: '
+    IFS= read -r choice
+    case "$choice" in
+      1) _cvm_profile_list "$target" ;;
+      2) _cvm_profile_prompt_upsert "$target" ;;
+      3) printf '配置名称: '; IFS= read -r name; _cvm_profile_prompt_upsert "$target" "$name" ;;
+      4) printf '配置名称: '; IFS= read -r name; [[ -n "$name" ]] && _cvm_profile_delete "$target" "$name" ;;
+      5) printf '配置名称: '; IFS= read -r name; [[ -n "$name" ]] && _cvm_profile_use "$target" "$name" ;;
+      6) cvm_config "$target" ;;
+      0) return 0 ;;
+      *) _cvm_warn "无效选项" ;;
+    esac
+  done
+}
+
+cvm_profile() {
+  local cmd="${1:-list}"
+  shift 2>/dev/null
+  case "$cmd" in
+    list|ls) _cvm_profile_list "${1:-all}" ;;
+    create|add|set) _cvm_profile_upsert "$@" ;;
+    delete|remove|rm) _cvm_profile_delete "$@" ;;
+    use|switch) _cvm_profile_use "$@" ;;
+    edit) _cvm_profile_prompt_upsert "$@" ;;
+    *)
+      _cvm_err "用法: cvm profile list|add|edit|delete|use ..."
+      return 1
+      ;;
+  esac
+}
+
 _cvm_menu_claude() {
   local choice value
   while true; do
@@ -1089,18 +1380,29 @@ cvm_menu() {
   local choice
   while true; do
     echo -e "\n${BOLD}CVM 交互式菜单${NC}"
-    echo "  1) Claude 配置"
-    echo "  2) Codex 配置"
-    echo "  3) 查看全部配置"
+    echo "  1) Claude 模型配置管理"
+    echo "  2) Codex 模型配置管理"
+    echo "  3) 查看全部当前配置"
     echo "  4) 环境检测"
+    echo "  5) 高级单项配置(旧方式)"
     echo "  0) 退出"
     printf '请选择: '
     IFS= read -r choice
     case "$choice" in
-      1) _cvm_menu_claude ;;
-      2) _cvm_menu_codex ;;
+      1) _cvm_profile_menu_target claude ;;
+      2) _cvm_profile_menu_target codex ;;
       3) cvm_config all ;;
       4) cvm_detect all ;;
+      5)
+        echo "  1) Claude 单项配置"
+        echo "  2) Codex 单项配置"
+        printf '请选择: '
+        IFS= read -r choice
+        case "$choice" in
+          1) _cvm_menu_claude ;;
+          2) _cvm_menu_codex ;;
+        esac
+        ;;
       0) return 0 ;;
       *) _cvm_warn "无效选项" ;;
     esac
@@ -1246,6 +1548,9 @@ ${BOLD}维护与诊断${NC}
   ${CYAN}cvm config set <目标> <项> <值>${NC} 设置 API URL、Key、模型等
   ${CYAN}cvm config clear <目标> <项>${NC} 清除 CVM 管理的配置项
   ${CYAN}cvm menu | cvm config edit${NC}  打开交互式配置菜单
+  ${CYAN}cvm profile list [claude|codex]${NC} 管理多套模型/API 配置
+  ${CYAN}cvm profile add <目标> <名称> <url> <key> <model> [proxy]${NC}
+  ${CYAN}cvm profile use <目标> <名称>${NC} 切换当前使用配置
   ${CYAN}cvm version | cvm -v${NC}        显示 CVM 自身版本
   ${CYAN}cvm help | cvm -h${NC}           显示本指令说明
 
@@ -1300,6 +1605,8 @@ ${BOLD}常用示例${NC}
   cvm config set claude api-url https://api.example.com
   cvm config set claude api-key sk-ant-...
   cvm config set claude model claude-opus-4-7
+  cvm profile add claude work https://api.example.com sk-ant-... claude-opus-4-7 socks5://127.0.0.1:7890
+  cvm profile use claude work
   cvm menu                  # 交互式配置
   codex-v 0.139.0           # 运行 Codex 0.139.0
   cvm remote                # 查看最近发布的版本
@@ -1895,6 +2202,7 @@ cvm() {
     detect)     cvm_detect "$@" ;;
     config)     cvm_config "$@" ;;
     menu)       cvm_menu "$@" ;;
+    profile|profiles) cvm_profile "$@" ;;
     changelog)  cvm_changelog "$@" ;;
     version|-v) echo "cvm v${CVM_VERSION}" ;;
     help|-h|--help|"")
@@ -2158,7 +2466,7 @@ fi
 # ── Tab Completion ───────────────────────────────────────────────────────────
 
 _cvm_completions() {
-  local commands="codex use install uninstall remove rm pin unpin default list ls current installed remote releases self-update update clean doctor detect config menu changelog version help"
+  local commands="codex use install uninstall remove rm pin unpin default list ls current installed remote releases self-update update clean doctor detect config menu profile profiles changelog version help"
 
   if [[ ${#COMP_WORDS[@]} -eq 2 ]]; then
     COMPREPLY=($(compgen -W "$commands" -- "${COMP_WORDS[1]}"))
@@ -2204,6 +2512,7 @@ if [[ -n "$ZSH_VERSION" ]] && (( $+functions[compdef] )); then
       'detect:检测安装来源'
       'config:读取或编辑配置'
       'menu:打开交互式菜单'
+      'profile:管理多套模型/API 配置'
       'changelog:查看更新日志'
       'version:显示 CVM 版本'
       'help:显示帮助'

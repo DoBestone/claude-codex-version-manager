@@ -119,6 +119,10 @@ cvm config set claude api-key sk-ant-...
 cvm config set claude model claude-opus-4-7
 cvm config clear claude api-url
 cvm menu                                  # 交互式配置菜单
+cvm profile list [claude|codex]
+cvm profile add claude work https://api.example.com sk-ant-... claude-opus-4-7 socks5://127.0.0.1:7890
+cvm profile use claude work
+cvm profile delete claude work
 cvm self-update
 
 cvm codex installed
@@ -133,10 +137,15 @@ cvm codex uninstall 0.139.0
 ~/.cvm/
 ├── cvm.sh
 ├── env
+├── profiles.json
 ├── pins
 ├── versions/
 └── codex-versions/
 ```
+
+`profiles.json` 保存多套模型/API 配置；`env` 保存当前生效配置。使用
+`cvm menu` 可以创建、编辑、删除、切换 Claude 或 Codex 配置。每套配置包含
+名称、API URL、API Key、模型和可选代理（`http://...` 或 `socks5://...`）。
 
 ## 卸载
 
