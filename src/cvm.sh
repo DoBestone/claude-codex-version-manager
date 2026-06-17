@@ -1313,7 +1313,7 @@ _cvm_profile_menu_target() {
     echo "  2) 创建配置"
     echo "  3) 编辑配置"
     echo "  4) 删除配置"
-    echo "  5) 切换为当前配置"
+    echo "  5) 切换当前使用配置"
     echo "  6) 查看当前生效配置"
     echo "  0) 返回"
     printf '请选择: '
