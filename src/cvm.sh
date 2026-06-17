@@ -4,7 +4,7 @@
 # A lightweight cross-platform version manager for Claude Code and OpenAI Codex CLI
 # ============================================================================
 
-CVM_VERSION="1.5.0"
+CVM_VERSION="1.6.0"
 CVM_DIR="${CVM_DIR:-$HOME/.cvm}"
 CVM_REPO="${CVM_REPO:-DoBestone/claude-codex-version-manager}"
 CVM_PINS_FILE="$CVM_DIR/pins"
@@ -497,7 +497,7 @@ _cvm_codex_installed() {
       printf '%s|全局 npm\n' "$ver" >> "$records"
   done < <(find "$HOME/.nvm/versions" -path "*/lib/node_modules/$CVM_CODEX_NPM_PACKAGE/package.json" -type f 2>/dev/null)
 
-  current_entry=$(command -v codex 2>/dev/null)
+  current_entry=$(command -v codex 2>/dev/null) || true
   if [[ -n "$current_entry" ]]; then
     current_ver=$(_cvm_codex_version_from_entry "$current_entry")
     [[ -n "$current_ver" ]] && printf '%s|系统安装\n' "$current_ver" >> "$records"
@@ -714,7 +714,7 @@ _cvm_detect_claude() {
   echo -e "\n${BOLD}Claude Code 安装检测:${NC}"
   echo -e "───────────────────────────────────────────"
 
-  current_entry=$(command -v claude 2>/dev/null)
+  current_entry=$(command -v claude 2>/dev/null) || true
   if [[ -n "$current_entry" ]]; then
     current_ver=$(_cvm_current_version)
     echo -e "  ${GREEN}✔${NC} PATH    ${current_entry} ${DIM}${current_ver:+v$current_ver}${NC}"
@@ -745,7 +745,7 @@ _cvm_detect_codex() {
   echo -e "\n${BOLD}Codex 安装检测:${NC}"
   echo -e "───────────────────────────────────────────"
 
-  current_entry=$(command -v codex 2>/dev/null)
+  current_entry=$(command -v codex 2>/dev/null) || true
   if [[ -n "$current_entry" ]]; then
     current_ver=$(_cvm_codex_version_from_entry "$current_entry")
     echo -e "  ${GREEN}✔${NC} PATH    ${current_entry} ${DIM}${current_ver:+v$current_ver}${NC}"
@@ -855,6 +855,11 @@ const vars = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "CLAUDE_CODE_SUBAGENT_MODEL",
+  "CLAUDE_CODE_EFFORT_LEVEL",
   "CLAUDE_CODE_USE_BEDROCK",
   "CLAUDE_CODE_USE_VERTEX",
   "OPENAI_BASE_URL",
@@ -909,6 +914,11 @@ _cvm_config_var() {
     claude:api-key|claude:key) echo "ANTHROPIC_API_KEY" ;;
     claude:auth-token|claude:token) echo "ANTHROPIC_AUTH_TOKEN" ;;
     claude:model) echo "ANTHROPIC_MODEL" ;;
+    claude:opus-model|claude:opus) echo "ANTHROPIC_DEFAULT_OPUS_MODEL" ;;
+    claude:sonnet-model|claude:sonnet) echo "ANTHROPIC_DEFAULT_SONNET_MODEL" ;;
+    claude:haiku-model|claude:haiku) echo "ANTHROPIC_DEFAULT_HAIKU_MODEL" ;;
+    claude:subagent-model|claude:subagent) echo "CLAUDE_CODE_SUBAGENT_MODEL" ;;
+    claude:effort|claude:effort-level) echo "CLAUDE_CODE_EFFORT_LEVEL" ;;
     codex:api-url|codex:url|codex:base-url) echo "OPENAI_BASE_URL" ;;
     codex:api-key|codex:key) echo "OPENAI_API_KEY" ;;
     codex:model) echo "OPENAI_MODEL" ;;
@@ -1007,6 +1017,80 @@ _cvm_config_clear() {
     return 1
   }
   _cvm_config_clear_var "$var_name"
+}
+
+_cvm_reset_var_list() {
+  local target="$1"
+  local claude_vars="ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX"
+  local codex_vars="OPENAI_BASE_URL OPENAI_API_KEY OPENAI_MODEL OPENAI_ORG_ID OPENAI_PROJECT_ID"
+  local proxy_vars="HTTPS_PROXY HTTP_PROXY"
+  case "$target" in
+    claude) printf '%s\n' "$claude_vars" ;;
+    codex)  printf '%s\n' "$codex_vars" ;;
+    all)    printf '%s\n' "$claude_vars $codex_vars $proxy_vars" ;;
+  esac
+}
+
+# Restore Claude Code / Codex to their official (subscription/login) state by
+# clearing every third-party override variable from ~/.cvm/env and the current
+# shell. Env vars take precedence over CLI login, so this is what makes
+# `/logout` + re-login actually take effect.
+_cvm_reset() {
+  local target="${1:-all}"
+  local var cleared=0 vars rc found_rc="" pattern="" tmp
+
+  case "$target" in
+    claude|codex|all) ;;
+    *)
+      _cvm_err "用法: cvm reset [claude|codex|all]"
+      return 1
+      ;;
+  esac
+
+  vars="$(_cvm_reset_var_list "$target")"
+  for var in $vars; do
+    if [[ -n "$(_cvm_var_value "$var")" ]] || { [[ -f "$CVM_ENV_FILE" ]] && grep -q "^export ${var}=" "$CVM_ENV_FILE"; }; then
+      cleared=$((cleared + 1))
+    fi
+    unset "$var" 2>/dev/null || true
+    if [[ -n "$pattern" ]]; then pattern="${pattern}|${var}"; else pattern="$var"; fi
+  done
+
+  # Scrub every target var from the env file in a single pass so the result is
+  # deterministic regardless of what is still exported in this shell.
+  if [[ -f "$CVM_ENV_FILE" && -n "$pattern" ]]; then
+    tmp="${CVM_ENV_FILE}.tmp.$$"
+    if grep -vE "^export (${pattern})=" "$CVM_ENV_FILE" > "$tmp" 2>/dev/null; then
+      mv "$tmp" "$CVM_ENV_FILE"
+    else
+      mv "$tmp" "$CVM_ENV_FILE" 2>/dev/null || rm -f "$tmp"
+    fi
+  fi
+
+  if [[ "$cleared" -gt 0 ]]; then
+    _cvm_log "已清除 ${CYAN}${cleared}${NC} 个 ${target} 覆盖变量，恢复官方状态"
+  else
+    _cvm_log "${target} 当前没有 CVM 管理的覆盖变量，已是官方状态"
+  fi
+
+  # Warn about overrides hard-coded in shell rc files: CVM cannot safely edit
+  # them, but they would re-inject the third-party config in every new shell.
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile"; do
+    [[ -f "$rc" ]] || continue
+    for var in $vars; do
+      if grep -qE "^[[:space:]]*export[[:space:]]+${var}=" "$rc" 2>/dev/null; then
+        found_rc="${found_rc}${rc}\n"
+        break
+      fi
+    done
+  done
+  if [[ -n "$found_rc" ]]; then
+    _cvm_warn "以下文件仍直接 export 了覆盖变量，请手动删除对应行，否则新终端会重新生效:"
+    printf '%b' "$found_rc" | while IFS= read -r rc; do [[ -n "$rc" ]] && echo "    $rc"; done
+  fi
+
+  echo -e "  ${DIM}已开的终端或正在运行的 Claude Code 需重启或重新 source 才会生效。${NC}"
+  echo -e "  ${DIM}恢复后用订阅登录: 运行 ${NC}${CYAN}claude${NC}${DIM} 并执行 ${NC}${CYAN}/login${NC}${DIM}。${NC}"
 }
 
 _cvm_prompt_value() {
@@ -1220,6 +1304,11 @@ const vars = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "CLAUDE_CODE_SUBAGENT_MODEL",
+  "CLAUDE_CODE_EFFORT_LEVEL",
   "CLAUDE_CODE_USE_BEDROCK",
   "CLAUDE_CODE_USE_VERTEX",
   "OPENAI_BASE_URL",
@@ -1364,6 +1453,7 @@ _cvm_menu_claude() {
     echo "  6) 清除 API URL"
     echo "  7) 清除 API Key"
     echo "  8) 查看配置"
+    echo "  9) 恢复官方状态 (清除全部第三方覆盖变量)"
     echo "  0) 返回"
     printf '请选择: '
     IFS= read -r choice
@@ -1376,6 +1466,7 @@ _cvm_menu_claude() {
       6) _cvm_config_clear claude api-url ;;
       7) _cvm_config_clear claude api-key ;;
       8) _cvm_config_claude false ;;
+      9) _cvm_reset claude ;;
       0) return 0 ;;
       *) _cvm_warn "无效选项" ;;
     esac
@@ -1394,6 +1485,7 @@ _cvm_menu_codex() {
     echo "  6) 清除 API URL"
     echo "  7) 清除 API Key"
     echo "  8) 查看配置"
+    echo "  9) 恢复官方状态 (清除全部第三方覆盖变量)"
     echo "  0) 返回"
     printf '请选择: '
     IFS= read -r choice
@@ -1406,6 +1498,7 @@ _cvm_menu_codex() {
       6) _cvm_config_clear codex api-url ;;
       7) _cvm_config_clear codex api-key ;;
       8) _cvm_config_codex false ;;
+      9) _cvm_reset codex ;;
       0) return 0 ;;
       *) _cvm_warn "无效选项" ;;
     esac
@@ -1615,6 +1708,7 @@ ${BOLD}维护与诊断${NC}
   ${CYAN}cvm config ... --show-secrets${NC} 显示认证/API 原始值
   ${CYAN}cvm config set <目标> <项> <值>${NC} 设置 API URL、Key、模型等
   ${CYAN}cvm config clear <目标> <项>${NC} 清除 CVM 管理的配置项
+  ${CYAN}cvm reset [claude|codex|all]${NC} 清除全部第三方覆盖变量，恢复官方状态
   ${CYAN}cvm menu | cvm config edit${NC}  打开交互式配置菜单
   ${CYAN}cvm profile list [claude|codex]${NC} 管理多套模型/API 配置
   ${CYAN}cvm profile add <目标> <名称> <url> <key> <model> [proxy]${NC}
@@ -2270,6 +2364,7 @@ cvm() {
     doctor)     cvm_doctor "$@" ;;
     detect)     cvm_detect "$@" ;;
     config)     cvm_config "$@" ;;
+    reset|restore) _cvm_reset "$@" ;;
     profile|profiles) cvm_profile "$@" ;;
     changelog)  cvm_changelog "$@" ;;
     version|-v) echo "cvm v${CVM_VERSION}" ;;
@@ -2431,7 +2526,7 @@ codex-config() {
 
 codex-update() {
   local current_entry
-  current_entry=$(command -v codex 2>/dev/null)
+  current_entry=$(command -v codex 2>/dev/null) || true
   if command -v brew &>/dev/null &&
     [[ "$current_entry" == /opt/homebrew/*/codex || "$current_entry" == /usr/local/*/codex ]]; then
     brew upgrade --cask codex

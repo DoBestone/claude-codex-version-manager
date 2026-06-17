@@ -121,6 +121,7 @@ cvm config set claude api-url https://api.example.com
 cvm config set claude api-key sk-ant-...
 cvm config set claude model claude-opus-4-7
 cvm config clear claude api-url
+cvm reset [claude|codex|all]              # 清除全部第三方覆盖变量，恢复官方订阅/登录状态
 cvm profile list [claude|codex]
 cvm profile add claude work https://api.example.com sk-ant-... claude-opus-4-7 socks5://127.0.0.1:7890
 cvm profile use claude work

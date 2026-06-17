@@ -16,6 +16,7 @@ bash -n "$ROOT/uninstall.sh"
 HOME="$TEMP_HOME" \
 CVM_DIR="$TEMP_HOME/.cvm" \
 CVM_SHELL_RC="$TEMP_HOME/.bashrc" \
+CVM_GLOBAL=0 \
 CVM_TEST_UNAME=Linux \
 bash "$ROOT/install.sh"
 
@@ -35,7 +36,7 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
     esac
   }
   source "$HOME/.cvm/cvm.sh"
-  [[ "$(cvm version)" == "cvm v1.5.0" ]]
+  [[ "$(cvm version)" == "cvm v1.6.0" ]]
   for command_name in \
     cvm claude-auto claude-v claude-l-a claude-v-a claude-l-l claude-v-l \
     claude-l-r claude-v-r claude-install claude-current claude-uninstall \
@@ -81,6 +82,27 @@ HOME="$TEMP_HOME" CVM_DIR="$TEMP_HOME/.cvm" bash --noprofile --norc -c '
   if contains "$(cvm profile list claude)" "work"; then
     exit 1
   fi
+  # reset: full third-party (DeepSeek-style) override set must be clearable
+  cvm config set claude api-url "https://api.deepseek.com/anthropic" >/dev/null
+  cvm config set claude auth-token "ds-secret" >/dev/null
+  cvm config set claude model "deepseek-v4-pro" >/dev/null
+  cvm config set claude opus-model "deepseek-v4-pro" >/dev/null
+  cvm config set claude sonnet-model "deepseek-v4-pro" >/dev/null
+  cvm config set claude haiku-model "deepseek-v4-flash" >/dev/null
+  cvm config set claude subagent-model "deepseek-v4-flash" >/dev/null
+  cvm config set claude effort "max" >/dev/null
+  [[ "$ANTHROPIC_DEFAULT_OPUS_MODEL" == "deepseek-v4-pro" ]]
+  [[ "$CLAUDE_CODE_EFFORT_LEVEL" == "max" ]]
+  grep -q "ANTHROPIC_DEFAULT_OPUS_MODEL" "$HOME/.cvm/env"
+  cvm reset claude >/dev/null
+  for reset_var in ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL \
+    ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_EFFORT_LEVEL; do
+    [[ -z "${!reset_var:-}" ]]
+    if grep -q "^export ${reset_var}=" "$HOME/.cvm/env"; then
+      exit 1
+    fi
+  done
   printf "2\n2\nmenu-codex\nhttps://menu-openai.example/v1\nsk-menu\ngpt-menu-test\nhttp://127.0.0.1:7890\n5\n1\n0\n0\n" | cvm menu >/dev/null 2>&1
   unset OPENAI_MODEL
   source "$HOME/.cvm/env"
@@ -150,7 +172,7 @@ if command -v zsh >/dev/null 2>&1; then
     esac
   }
   source "$HOME/.cvm/cvm.sh"
-  [[ "$(cvm version)" == "cvm v1.5.0" ]]
+  [[ "$(cvm version)" == "cvm v1.6.0" ]]
   for command_name in \
     cvm claude-auto claude-v claude-l-a claude-v-a claude-l-l claude-v-l \
     claude-l-r claude-v-r claude-install claude-current claude-uninstall \
@@ -185,7 +207,7 @@ CVM_TEST_CODEX_VERSIONS='["0.139.0"]' \
 CVM_TEST_UNAME=Linux \
 bash "$ROOT/install.sh" --global
 
-[[ "$("$TEMP_HOME/global/bin/cvm" version)" == "cvm v1.5.0" ]]
+[[ "$("$TEMP_HOME/global/bin/cvm" version)" == "cvm v1.6.0" ]]
 [[ -x "$TEMP_HOME/global/bin/claude-v-l" ]]
 [[ -x "$TEMP_HOME/global/bin/claude-2.1.177" ]]
 [[ -x "$TEMP_HOME/global/bin/claude-auto-2.1.177" ]]
@@ -198,6 +220,7 @@ grep -q '# >>> cvm >>>' "$TEMP_HOME/.bashrc"
 HOME="$TEMP_HOME" \
 CVM_DIR="$TEMP_HOME/.cvm" \
 CVM_SHELL_RC="$TEMP_HOME/.bashrc" \
+CVM_GLOBAL=0 \
 CVM_TEST_UNAME=MINGW64_NT-10.0 \
 bash "$ROOT/install.sh"
 
@@ -206,6 +229,7 @@ bash "$ROOT/install.sh"
 HOME="$TEMP_HOME" \
 CVM_DIR="$TEMP_HOME/.cvm" \
 CVM_SHELL_RC="$TEMP_HOME/.bashrc" \
+CVM_GLOBAL=0 \
 bash "$ROOT/uninstall.sh"
 
 [[ ! -f "$TEMP_HOME/.cvm/cvm.sh" ]]
