@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 # CVM - Claude Code / Codex Version Manager
-# A lightweight macOS version manager for Claude Code and OpenAI Codex CLI
+# A lightweight cross-platform version manager for Claude Code and OpenAI Codex CLI
 # ============================================================================
 
 CVM_VERSION="1.5.0"
@@ -182,6 +182,7 @@ _cvm_platform_package() {
   case "$(uname -s)" in
     Darwin) os="darwin" ;;
     Linux) os="linux" ;;
+    CYGWIN*|MINGW*|MSYS*) os="win32" ;;
     *) return 1 ;;
   esac
   case "$(uname -m)" in
@@ -1198,7 +1199,12 @@ cvm_self_update() {
     _cvm_err "CVM 更新下载失败"
     return 1
   fi
-  if ! bash -n "$temp_file" || ! zsh -n "$temp_file"; then
+  if ! bash -n "$temp_file"; then
+    rm -f "$temp_file"
+    _cvm_err "下载的 CVM 脚本语法校验失败"
+    return 1
+  fi
+  if command -v zsh &>/dev/null && ! zsh -n "$temp_file"; then
     rm -f "$temp_file"
     _cvm_err "下载的 CVM 脚本语法校验失败"
     return 1
@@ -1208,7 +1214,7 @@ cvm_self_update() {
   [[ -f "$CVM_DIR/cvm.sh" ]] && cp "$CVM_DIR/cvm.sh" "$CVM_DIR/cvm.sh.bak"
   mv "$temp_file" "$CVM_DIR/cvm.sh"
   chmod 0644 "$CVM_DIR/cvm.sh"
-  _cvm_log "CVM 已更新，请执行 ${CYAN}source ~/.zshrc${NC} 或重开终端"
+  _cvm_log "CVM 已更新，请执行 ${CYAN}source ~/.cvm/cvm.sh${NC} 或重开终端"
 }
 
 # View changelog for a version
@@ -1229,6 +1235,8 @@ cvm_changelog() {
     open "$url"
   elif command -v xdg-open &>/dev/null; then
     xdg-open "$url"
+  elif command -v explorer.exe &>/dev/null; then
+    explorer.exe "$url"
   else
     echo -e "  ${CYAN}${url}${NC}"
   fi
@@ -1399,7 +1407,8 @@ codex-clean() {
 codex-update() {
   local current_entry
   current_entry=$(command -v codex 2>/dev/null)
-  if [[ "$current_entry" == /opt/homebrew/*/codex || "$current_entry" == /usr/local/*/codex ]]; then
+  if command -v brew &>/dev/null &&
+    [[ "$current_entry" == /opt/homebrew/*/codex || "$current_entry" == /usr/local/*/codex ]]; then
     brew upgrade --cask codex
   else
     npm install -g "${CVM_CODEX_NPM_PACKAGE}@latest" --registry="$CVM_REGISTRY"

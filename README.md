@@ -1,14 +1,15 @@
 # Claude Codex Version Manager
 
-`cvm` 是面向 macOS 的 Claude Code 与 OpenAI Codex CLI 版本管理工具。
+`cvm` 是面向 macOS、Linux 与 Windows bash 环境的 Claude Code 与
+OpenAI Codex CLI 版本管理工具。
 
-它可以复用已有的 CVM 安装、npm/npx 缓存、全局 npm 安装以及 Homebrew
-Codex，只有本地不存在目标版本时才联网下载。
+它可以复用已有的 CVM 安装、npm/npx 缓存、全局 npm 安装以及 macOS 上的
+Homebrew Codex，只有本地不存在目标版本时才联网下载。
 
 ## 要求
 
-- macOS
-- zsh
+- macOS、Linux，或 Windows 的 Git Bash/MSYS2/Cygwin
+- bash 或 zsh
 - Node.js 与 npm
 - curl
 
@@ -16,11 +17,12 @@ Codex，只有本地不存在目标版本时才联网下载。
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/DoBestone/claude-codex-version-manager/main/install.sh)
-source ~/.zshrc
+source ~/.cvm/cvm.sh
 ```
 
 安装器可以重复执行。升级时仅替换 `~/.cvm/cvm.sh`，不会删除已安装版本、
-收藏或缓存导入结果。
+收藏或缓存导入结果。默认会按当前 shell 写入 `~/.zshrc`、`~/.bashrc` 或
+`~/.profile`；也可以通过 `CVM_SHELL_RC=/path/to/rc bash install.sh` 指定。
 
 本地克隆安装：
 
@@ -28,8 +30,11 @@ source ~/.zshrc
 git clone https://github.com/DoBestone/claude-codex-version-manager.git
 cd claude-codex-version-manager
 bash install.sh
-source ~/.zshrc
+source ~/.cvm/cvm.sh
 ```
+
+Windows 需在 Git Bash、MSYS2 或 Cygwin 中运行上述命令。当前不提供原生
+PowerShell 安装器。
 
 ## Claude Code
 
@@ -68,13 +73,13 @@ codex-auto            # 当前版本跳过审批与沙箱运行
 codex-auto-0.139.0    # 指定版本跳过审批与沙箱运行
 codex-latest          # 临时运行 npm 最新版
 codex-versions        # npm 全部版本
-codex-update          # 按当前来源使用 Homebrew 或 npm 更新
+codex-update          # 按当前来源使用 Homebrew(macOS) 或 npm 更新
 ```
 
 `codex-v-a`、`codex-v-l`、`codex-v-r` 保留为兼容别名。
 
-Codex 的卸载不会删除 Homebrew 系统安装，只清理 CVM 副本与匹配的 npx
-缓存。
+Codex 的卸载不会删除 Homebrew 或 npm 的系统安装，只清理 CVM 副本与匹配的
+npx 缓存。
 
 `claude-auto*` 和 `codex-auto*` 会关闭对应 CLI 的安全确认，仅应在可信目录
 和明确了解命令影响时使用。Codex 原生命令继续直接使用，例如

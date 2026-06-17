@@ -2,8 +2,22 @@
 set -euo pipefail
 
 CVM_DIR="${CVM_DIR:-$HOME/.cvm}"
-SHELL_RC="${CVM_SHELL_RC:-$HOME/.zshrc}"
 PURGE=false
+
+default_shell_rc() {
+  if [[ -n "${CVM_SHELL_RC:-}" ]]; then
+    printf '%s\n' "$CVM_SHELL_RC"
+    return 0
+  fi
+
+  case "$(basename "${SHELL:-}")" in
+    zsh) printf '%s\n' "$HOME/.zshrc" ;;
+    bash) printf '%s\n' "$HOME/.bashrc" ;;
+    *) printf '%s\n' "$HOME/.profile" ;;
+  esac
+}
+
+SHELL_RC="$(default_shell_rc)"
 
 if [[ "${1:-}" == "--purge" ]]; then
   PURGE=true

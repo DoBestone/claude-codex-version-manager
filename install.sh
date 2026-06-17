@@ -3,18 +3,35 @@ set -euo pipefail
 
 REPO="${CVM_REPO:-DoBestone/claude-codex-version-manager}"
 CVM_DIR="${CVM_DIR:-$HOME/.cvm}"
-SHELL_RC="${CVM_SHELL_RC:-$HOME/.zshrc}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_FILE="$SCRIPT_DIR/src/cvm.sh"
 START_MARKER="# >>> cvm >>>"
 END_MARKER="# <<< cvm <<<"
 
-if [[ "$(uname -s)" != "Darwin" ]]; then
-  printf 'CVM 当前自动安装器仅支持 macOS。\n' >&2
-  exit 1
-fi
+default_shell_rc() {
+  if [[ -n "${CVM_SHELL_RC:-}" ]]; then
+    printf '%s\n' "$CVM_SHELL_RC"
+    return 0
+  fi
 
-for command_name in curl node npm zsh; do
+  case "$(basename "${SHELL:-}")" in
+    zsh) printf '%s\n' "$HOME/.zshrc" ;;
+    bash) printf '%s\n' "$HOME/.bashrc" ;;
+    *) printf '%s\n' "$HOME/.profile" ;;
+  esac
+}
+
+case "${CVM_TEST_UNAME:-$(uname -s)}" in
+  Darwin|Linux|CYGWIN*|MINGW*|MSYS*) ;;
+  *)
+    printf 'CVM 当前自动安装器支持 macOS、Linux 和 Windows Git Bash/MSYS/Cygwin。\n' >&2
+    exit 1
+    ;;
+esac
+
+SHELL_RC="$(default_shell_rc)"
+
+for command_name in curl node npm bash; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf '缺少依赖: %s\n' "$command_name" >&2
     exit 1
@@ -39,7 +56,9 @@ if [[ ! -f "$SOURCE_FILE" ]]; then
 fi
 
 bash -n "$SOURCE_FILE"
-zsh -n "$SOURCE_FILE"
+if command -v zsh >/dev/null 2>&1; then
+  zsh -n "$SOURCE_FILE"
+fi
 
 mkdir -p "$CVM_DIR"
 if [[ -f "$CVM_DIR/cvm.sh" ]]; then
