@@ -497,7 +497,7 @@ _cvm_codex_installed() {
       printf '%s|全局 npm\n' "$ver" >> "$records"
   done < <(find "$HOME/.nvm/versions" -path "*/lib/node_modules/$CVM_CODEX_NPM_PACKAGE/package.json" -type f 2>/dev/null)
 
-  current_entry=$(command -v codex 2>/dev/null)
+  current_entry=$(command -v codex 2>/dev/null) || true
   if [[ -n "$current_entry" ]]; then
     current_ver=$(_cvm_codex_version_from_entry "$current_entry")
     [[ -n "$current_ver" ]] && printf '%s|系统安装\n' "$current_ver" >> "$records"
@@ -714,7 +714,7 @@ _cvm_detect_claude() {
   echo -e "\n${BOLD}Claude Code 安装检测:${NC}"
   echo -e "───────────────────────────────────────────"
 
-  current_entry=$(command -v claude 2>/dev/null)
+  current_entry=$(command -v claude 2>/dev/null) || true
   if [[ -n "$current_entry" ]]; then
     current_ver=$(_cvm_current_version)
     echo -e "  ${GREEN}✔${NC} PATH    ${current_entry} ${DIM}${current_ver:+v$current_ver}${NC}"
@@ -745,7 +745,7 @@ _cvm_detect_codex() {
   echo -e "\n${BOLD}Codex 安装检测:${NC}"
   echo -e "───────────────────────────────────────────"
 
-  current_entry=$(command -v codex 2>/dev/null)
+  current_entry=$(command -v codex 2>/dev/null) || true
   if [[ -n "$current_entry" ]]; then
     current_ver=$(_cvm_codex_version_from_entry "$current_entry")
     echo -e "  ${GREEN}✔${NC} PATH    ${current_entry} ${DIM}${current_ver:+v$current_ver}${NC}"
@@ -2526,7 +2526,7 @@ codex-config() {
 
 codex-update() {
   local current_entry
-  current_entry=$(command -v codex 2>/dev/null)
+  current_entry=$(command -v codex 2>/dev/null) || true
   if command -v brew &>/dev/null &&
     [[ "$current_entry" == /opt/homebrew/*/codex || "$current_entry" == /usr/local/*/codex ]]; then
     brew upgrade --cask codex
